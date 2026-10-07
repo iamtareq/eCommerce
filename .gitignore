@@ -34,3 +34,6 @@ npm-debug.log*
 
 # project-local PostgreSQL data (development only)
 /.local-postgres/
+
+# deployment values (kept out of git)
+.env.deploy

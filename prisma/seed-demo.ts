@@ -8,12 +8,9 @@
  * Run: npm run db:seed:demo
  */
 import "dotenv/config";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../lib/db";
-
-const UPLOAD_DIR = path.resolve(process.cwd(), process.env.UPLOAD_DIR?.trim() || "./storage/uploads");
+import { saveImage } from "../lib/storage/drivers";
 
 async function placeholder(name: string, hue: string, label: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
@@ -27,11 +24,9 @@ async function placeholder(name: string, hue: string, label: string) {
     <text x="600" y="1110" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" fill="#f5ecd9" fill-opacity="0.8">Replace with a real product photo</text>
   </svg>`;
   const data = await sharp(Buffer.from(svg)).webp({ quality: 80 }).toBuffer();
-  const rel = `products/demo/${name}.webp`;
-  await mkdir(path.join(UPLOAD_DIR, "products/demo"), { recursive: true });
-  await writeFile(path.join(UPLOAD_DIR, rel), data);
-  // Served by app/media/[...path]; "demo" is a valid path segment.
-  return { url: `/media/${rel}`, storageKey: `local:${rel}`, width: 1200, height: 1200 };
+  // Stored through the configured driver, so demo images work on local disk and on Cloudinary alike.
+  const image = await saveImage(new File([new Uint8Array(data)], `${name}.webp`, { type: "image/webp" }), "products");
+  return { url: image.url, storageKey: image.key, width: image.width, height: image.height };
 }
 
 async function main() {

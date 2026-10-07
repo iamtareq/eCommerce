@@ -5,14 +5,13 @@
  * Run: npm run db:demo:remove
  */
 import "dotenv/config";
-import { rm } from "node:fs/promises";
-import path from "node:path";
 import { prisma } from "../lib/db";
+import { deleteImage } from "../lib/storage/drivers";
 
 async function main() {
   const products = await prisma.product.findMany({
     where: { slug: { startsWith: "demo-" } },
-    include: { _count: { select: { orderItems: true } } },
+    include: { images: true, _count: { select: { orderItems: true } } },
   });
   let deleted = 0;
   let archived = 0;
@@ -22,6 +21,8 @@ async function main() {
       archived++;
     } else {
       await prisma.product.delete({ where: { id: p.id } });
+      // Stored files are not removed by the cascade.
+      await Promise.all(p.images.map((i) => deleteImage(i.storageKey)));
       deleted++;
     }
   }
@@ -30,10 +31,6 @@ async function main() {
   if (coupon) {
     if (coupon._count.orders > 0) await prisma.coupon.update({ where: { id: coupon.id }, data: { isActive: false } });
     else await prisma.coupon.delete({ where: { id: coupon.id } });
-  }
-  if (archived === 0) {
-    const dir = path.resolve(process.cwd(), process.env.UPLOAD_DIR?.trim() || "./storage/uploads", "products/demo");
-    await rm(dir, { recursive: true, force: true });
   }
   console.log(`Demo products deleted: ${deleted}, archived (had orders): ${archived}, categories removed: ${cats.count}.`);
 }

@@ -94,7 +94,8 @@ test.describe("admin", () => {
     await expect(page.getByRole("heading", { name: /Assalamu alaikum/ })).toBeVisible();
 
     await page.goto("/admin/orders?q=" + encodeURIComponent("E2E"));
-    const first = page.locator("table a[href^='/admin/orders/']").first();
+    // The list is a card list on phones and a table from sm up; both are in the DOM, so take the visible one.
+    const first = page.locator("a[href^='/admin/orders/']").locator("visible=true").first();
     await expect(first).toBeVisible();
     await first.click();
     await expect(page.getByText("Customer & delivery")).toBeVisible();

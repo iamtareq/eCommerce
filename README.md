@@ -407,11 +407,19 @@ The app needs a Node.js server (or serverless functions) plus PostgreSQL. Two co
 5. Keep `STORAGE_DRIVER=local` and back up `storage/uploads` and the database.
 
 **B. Serverless (e.g. Vercel + Neon/Supabase + Cloudinary)**
-1. Create a hosted PostgreSQL and set `DATABASE_URL`. Use the provider's pooled connection string.
-2. Set `STORAGE_DRIVER=cloudinary` and the Cloudinary variables.
-3. Add all environment variables in the hosting dashboard.
-4. Build command `npm run build`. Run `npm run db:deploy` once per release against the production database.
-5. Optionally add a cron job calling `/api/cron/sheets-sync` with `CRON_SECRET`.
+1. Create a hosted PostgreSQL and set `DATABASE_URL` (use the provider's **pooled** connection string).
+2. Set `STORAGE_DRIVER=cloudinary` and the three Cloudinary variables — a serverless disk is temporary, so
+   uploaded product photos must go to Cloudinary.
+3. Import the GitHub repository in Vercel and add every environment variable (at least `DATABASE_URL`,
+   `APP_SECRET`, `NEXT_PUBLIC_SITE_URL`, `STORAGE_DRIVER`, `CLOUDINARY_*`).
+4. Vercel runs the `vercel-build` script, which applies database migrations (`prisma migrate deploy`) before
+   building, so each deploy ships with a matching database.
+5. Seed the first owner account and the delivery zones once, from your computer against the hosted database:
+   `DATABASE_URL="<hosted url>" npm run db:seed`.
+6. **Custom domain:** Vercel → Project → Settings → Domains → add your domain, then create the DNS records it
+   shows at your registrar. Afterwards set `NEXT_PUBLIC_SITE_URL` to `https://<your domain>` and redeploy, so
+   canonical links, the sitemap and Facebook previews use it.
+7. Optionally add a cron job calling `/api/cron/sheets-sync` with `CRON_SECRET`.
 
 Either way:
 - Set `NEXT_PUBLIC_SITE_URL` to the real domain (used for canonical links and Facebook previews).
