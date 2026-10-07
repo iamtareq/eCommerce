@@ -37,3 +37,4 @@ npm-debug.log*
 
 # deployment values (kept out of git)
 .env.deploy
+.env.vercel
