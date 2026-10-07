@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { dhakaDateKey } from "@/lib/dates";
 import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
-import { updateOrderStatus, listOrders } from "@/lib/orders/admin";
+import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { checkout, resetDb, seedFixture, type Fixture } from "./helpers";
@@ -251,6 +251,49 @@ describe("admin order management", () => {
     expect(events).toHaveLength(2);
     const order = await prisma.order.findUniqueOrThrow({ where: { id: r.order.id } });
     expect(order.googleSheetVersion).toBe(3);
+  });
+
+  it("refuses to restore an order whose coupon slot another order has taken", async () => {
+    await prisma.coupon.create({ data: { code: "ONE", type: "FIXED", value: 50, usageLimit: 1 } });
+    const a = await createOrder(checkout({ couponCode: "ONE", items: [{ variantId: f.frameSmall, quantity: 1 }] }));
+    if (!a.ok) throw new Error(JSON.stringify(a));
+    await updateOrderStatus(a.order.id, "CANCELLED", actor);
+    const b = await createOrder(checkout({ mobileNumber: "01811111111", couponCode: "ONE", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!b.ok) throw new Error(JSON.stringify(b));
+
+    await expect(updateOrderStatus(a.order.id, "CONFIRMED", actor)).rejects.toThrow(OrderUpdateError);
+    // Nothing moved: still cancelled, stock still returned, the coupon used once.
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.order.id } })).orderStatus).toBe("CANCELLED");
+    expect((await prisma.productVariant.findUniqueOrThrow({ where: { id: f.frameSmall } })).stock).toBe(10);
+    expect((await prisma.coupon.findUniqueOrThrow({ where: { code: "ONE" } })).usedCount).toBe(1);
+  });
+
+  it("refuses to restore an order past the coupon's per-phone limit", async () => {
+    await prisma.coupon.create({ data: { code: "PHONE1", type: "FIXED", value: 50, perPhoneLimit: 1 } });
+    const a = await createOrder(checkout({ couponCode: "PHONE1", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!a.ok) throw new Error(JSON.stringify(a));
+    await updateOrderStatus(a.order.id, "CANCELLED", actor);
+    const b = await createOrder(checkout({ couponCode: "PHONE1", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!b.ok) throw new Error(JSON.stringify(b));
+
+    await expect(updateOrderStatus(a.order.id, "PENDING", actor)).rejects.toThrow(OrderUpdateError);
+    expect((await prisma.coupon.findUniqueOrThrow({ where: { code: "PHONE1" } })).usedCount).toBe(1);
+  });
+
+  it("saves a status change and its note together, or neither", async () => {
+    const r = await createOrder(checkout({ items: [{ variantId: f.frameLarge, quantity: 2 }] }));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    await updateOrderStatus(r.order.id, "CANCELLED", actor, { adminNote: "customer called" });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.order.id } })).adminNote).toBe("customer called");
+
+    // Restoring fails (the stock is gone), so the note must not be saved either.
+    await prisma.productVariant.update({ where: { id: f.frameLarge }, data: { stock: 0 } });
+    await expect(updateOrderStatus(r.order.id, "CONFIRMED", actor, { adminNote: "changed" })).rejects.toThrow(OrderUpdateError);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.order.id } })).adminNote).toBe("customer called");
+
+    // An unchanged status still saves the note.
+    await updateOrderStatus(r.order.id, "CANCELLED", actor, { adminNote: "" });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.order.id } })).adminNote).toBeNull();
   });
 
   it("returns only the stock an order actually took", async () => {

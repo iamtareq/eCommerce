@@ -123,7 +123,8 @@ export async function POST(request: Request) {
 }
 
 const listQuery = z.object({
-  q: z.string().max(100).optional(),
+  // Cut, not rejected: a long pasted search must not fail the whole request.
+  q: z.string().optional().transform((v) => v?.slice(0, 100)),
   status: z.string().optional().transform((v) => (v && isOrderStatus(v) ? v : undefined)),
   sync: z.string().optional().transform((v) => (v && isSyncStatus(v) ? v : undefined)),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),

@@ -3,6 +3,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import sharp from "sharp";
+import { prisma } from "@/lib/db";
 import { randomToken } from "@/lib/security";
 
 /**
@@ -139,4 +140,20 @@ export async function deleteImage(key: string | null | undefined): Promise<void>
   } catch (error) {
     console.error("[storage] delete failed", key, error instanceof Error ? error.message : error);
   }
+}
+
+/**
+ * Deletes the stored images no product image or review points to any more. Image
+ * keys come back from the admin forms, so a key may be shared by several rows
+ * (e.g. copied to another product); its file stays until the last row is gone.
+ */
+export async function deleteUnusedImages(keys: (string | null | undefined)[]): Promise<void> {
+  const candidates = [...new Set(keys.filter((k): k is string => !!k))];
+  if (candidates.length === 0) return;
+  const [productImages, reviews] = await Promise.all([
+    prisma.productImage.findMany({ where: { storageKey: { in: candidates } }, select: { storageKey: true } }),
+    prisma.review.findMany({ where: { imageKey: { in: candidates } }, select: { imageKey: true } }),
+  ]);
+  const inUse = new Set<string | null>([...productImages.map((i) => i.storageKey), ...reviews.map((r) => r.imageKey)]);
+  await Promise.all(candidates.filter((k) => !inUse.has(k)).map((k) => deleteImage(k)));
 }

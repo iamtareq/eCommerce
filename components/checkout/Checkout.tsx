@@ -89,6 +89,8 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const idempotencyKey = useRef<string>("");
+  // The order the key was made for: an edited order needs a new key.
+  const idempotencyFor = useRef("");
   const started = useRef(false);
 
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -236,7 +238,6 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
       setFormError(MSG.emptyCart);
       return;
     }
-    if (!idempotencyKey.current) idempotencyKey.current = newKey();
 
     const parsed = checkoutSchema.safeParse(currentValues());
     if (!parsed.success) {
@@ -282,11 +283,21 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
     const expectedTotal = priced.total;
     track({ name: "order_form_submitted", value: expectedTotal, itemCount: parsed.data.items.reduce((s, i) => s + i.quantity, 0) });
 
+    // A retry of the same order keeps its key, so an order already placed (its
+    // response lost) comes back instead of being placed twice. A changed order
+    // gets a new key; the old one would return the earlier order and drop the edits.
+    const values = currentValues();
+    const fingerprint = JSON.stringify({ ...values, idempotencyKey: "" });
+    if (!idempotencyKey.current || idempotencyFor.current !== fingerprint) {
+      idempotencyKey.current = newKey();
+      idempotencyFor.current = fingerprint;
+    }
+
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...currentValues(), idempotencyKey: idempotencyKey.current, expectedTotal }),
+        body: JSON.stringify({ ...values, idempotencyKey: idempotencyKey.current, expectedTotal }),
       });
       const data = (await res.json().catch(() => null)) as
         | { ok: true; orderNumber: string; token: string; total: number; itemCount: number }

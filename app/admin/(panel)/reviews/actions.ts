@@ -5,7 +5,7 @@ import type { ActionResult } from "@/lib/admin/common";
 import { requireOwner } from "@/lib/auth/guard";
 import { REVIEWS_TAG } from "@/lib/catalog";
 import { prisma } from "@/lib/db";
-import { deleteImage } from "@/lib/storage";
+import { deleteUnusedImages } from "@/lib/storage";
 import { firstIssue, reviewInputSchema, type ReviewInput } from "./schema";
 
 function refresh() {
@@ -32,7 +32,7 @@ export async function saveReview(input: ReviewInput): Promise<ActionResult<{ id:
       if (!existing) return { ok: false, error: "Review not found. It may have been deleted." };
       await prisma.review.update({ where: { id }, data });
       // The old screenshot was replaced or removed: delete its file now that the DB no longer points to it.
-      if (existing.imageKey && existing.imageKey !== data.imageKey) await deleteImage(existing.imageKey);
+      if (existing.imageKey && existing.imageKey !== data.imageKey) await deleteUnusedImages([existing.imageKey]);
       refresh();
       return { ok: true, message: `Review by ${data.customerName} saved`, data: { id } };
     }
@@ -58,7 +58,7 @@ export async function deleteReview(id: string): Promise<ActionResult> {
     console.error("[admin] deleteReview failed", error);
     return { ok: false, error: "Could not delete the review. Please try again." };
   }
-  await deleteImage(review.imageKey);
+  await deleteUnusedImages([review.imageKey]);
   refresh();
   return { ok: true, message: `Review by ${review.customerName} deleted` };
 }

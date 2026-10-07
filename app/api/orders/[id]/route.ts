@@ -39,14 +39,17 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!parsed.success) return json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, 400);
 
   try {
-    if (parsed.data.status) {
-      const { stockChanged } = await updateOrderStatus(id, parsed.data.status, auth.admin);
+    const { status, adminNote } = parsed.data;
+    if (status) {
+      // Status and note are saved in one transaction: both apply or neither.
+      const { fromStatus, stockChanged } = await updateOrderStatus(id, status, auth.admin, { adminNote });
       // Cancelling returns stock and un-cancelling takes it again; refresh the storefront.
       if (stockChanged) revalidateTag(CATALOG_TAG, { expire: 0 });
-      after(() => syncOrderToSheet(id).then(() => undefined).catch((e) => console.error("[orders] sheet sync error", e)));
-    }
-    if (parsed.data.adminNote !== undefined) {
-      await updateAdminNote(id, parsed.data.adminNote, auth.admin);
+      if (fromStatus !== status) {
+        after(() => syncOrderToSheet(id).then(() => undefined).catch((e) => console.error("[orders] sheet sync error", e)));
+      }
+    } else if (adminNote !== undefined) {
+      await updateAdminNote(id, adminNote, auth.admin);
     }
   } catch (error) {
     if (error instanceof OrderUpdateError) return json({ error: error.message }, 409);

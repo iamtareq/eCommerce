@@ -175,8 +175,14 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
             UPDATE "Coupon" SET "usedCount" = "usedCount" + 1, "updatedAt" = NOW()
             WHERE "id" = ${couponId} AND "isActive" = true
               AND ("usageLimit" IS NULL OR "usedCount" < "usageLimit")
+              AND ("startsAt" IS NULL OR "startsAt" <= NOW())
+              AND ("endsAt" IS NULL OR "endsAt" > NOW())
             RETURNING "perPhoneLimit"`;
-          if (claimed.length === 0) throw new CouponConflict(COUPON_USED_UP);
+          if (claimed.length === 0) {
+            // Used up, or switched off or expired since lookupCoupon: say which.
+            const now = await lookupCoupon(pricing.coupon?.code ?? data.couponCode ?? "", null, tx);
+            throw new CouponConflict(now.ok ? COUPON_USED_UP : now.message);
+          }
           // lookupCoupon counted this phone's uses before the transaction; count
           // again now that any concurrent order from the same phone has committed.
           const perPhoneLimit = claimed[0]!.perPhoneLimit;

@@ -1,6 +1,6 @@
 import type { OrderStatus, SheetSyncStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
+import { prisma, type TransactionClient } from "@/lib/db";
 import { dhakaDayRange, startOfDhakaDay } from "@/lib/dates";
 import { markSheetStale } from "@/lib/google-sheets/sync";
 import { normalizeBdPhone } from "@/lib/phone";
@@ -100,19 +100,36 @@ export class OrderUpdateError extends Error {}
  * `stockChanged` is true when variant stock was returned or taken again, so
  * the caller can refresh the storefront catalog.
  */
-export async function updateOrderStatus(orderId: string, toStatus: OrderStatus, actor: AdminIdentity) {
+export async function updateOrderStatus(
+  orderId: string,
+  toStatus: OrderStatus,
+  actor: AdminIdentity,
+  options: { adminNote?: string } = {},
+) {
   return prisma.$transaction(async (tx) => {
+    const saveNote = () =>
+      options.adminNote === undefined ? Promise.resolve() : updateAdminNote(orderId, options.adminNote, actor, tx);
     // Lock the order first: a concurrent change waits here and then reads the
     // status this one committed, so stock and coupon usage move only once.
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
     if (locked.length === 0) throw new OrderUpdateError("Order not found");
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
     const fromStatus = order.orderStatus;
-    if (fromStatus === toStatus) return { order, fromStatus, stockChanged: false };
+    if (fromStatus === toStatus) {
+      await saveNote();
+      return { order, fromStatus, stockChanged: false };
+    }
 
     const cancelling = toStatus === "CANCELLED";
     const restoring = fromStatus === "CANCELLED";
     let stockChanged = false;
+
+    // Restoring takes the coupon again: hold the same per-phone lock order
+    // creation takes (before any variant or coupon row lock), so its per-phone count is exact.
+    if (restoring && order.couponId) {
+      const phoneLockKey = `order:phone:${order.mobileNumber}`;
+      await tx.$queryRaw`SELECT 1 AS "locked" FROM pg_advisory_xact_lock(hashtext(${phoneLockKey}))`;
+    }
 
     // Variant rows in the same lock order as order creation (no deadlocks).
     for (const item of [...order.items].sort(byVariantId)) {
@@ -142,11 +159,32 @@ export async function updateOrderStatus(orderId: string, toStatus: OrderStatus, 
         await tx.orderItem.update({ where: { id: item.id }, data: { stockReserved: true } });
       }
     }
-    if (order.couponId && (cancelling || restoring)) {
+    if (order.couponId && cancelling) {
       await tx.coupon.updateMany({
-        where: { id: order.couponId, ...(cancelling ? { usedCount: { gt: 0 } } : {}) },
-        data: { usedCount: cancelling ? { decrement: 1 } : { increment: 1 } },
+        where: { id: order.couponId, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
       });
+    } else if (order.couponId && restoring) {
+      // Same limits as a new order: other orders may have used the freed slot.
+      const claimed = await tx.$queryRaw<{ perPhoneLimit: number | null }[]>`
+        UPDATE "Coupon" SET "usedCount" = "usedCount" + 1, "updatedAt" = NOW()
+        WHERE "id" = ${order.couponId} AND ("usageLimit" IS NULL OR "usedCount" < "usageLimit")
+        RETURNING "perPhoneLimit"`;
+      if (claimed.length === 0) {
+        throw new OrderUpdateError(`Coupon "${order.couponCode}" has reached its usage limit, so this order cannot be restored.`);
+      }
+      const coupon = claimed[0]!;
+      if (coupon.perPhoneLimit != null) {
+        // This order is still CANCELLED here, so the count is the phone's other orders.
+        const used = await tx.order.count({
+          where: { couponId: order.couponId, mobileNumber: order.mobileNumber, orderStatus: { not: "CANCELLED" } },
+        });
+        if (used >= coupon.perPhoneLimit) {
+          throw new OrderUpdateError(
+            `This number has already used coupon "${order.couponCode}" ${used} time(s), its per-phone limit, so this order cannot be restored.`,
+          );
+        }
+      }
     }
 
     const updated = await tx.order.update({
@@ -164,14 +202,20 @@ export async function updateOrderStatus(orderId: string, toStatus: OrderStatus, 
         },
       },
     });
+    await saveNote();
     await markSheetStale(tx, orderId);
     return { order: updated, fromStatus, stockChanged };
   });
 }
 
-export async function updateAdminNote(orderId: string, note: string, actor: AdminIdentity) {
+export async function updateAdminNote(
+  orderId: string,
+  note: string,
+  actor: AdminIdentity,
+  db: TransactionClient | typeof prisma = prisma,
+) {
   const clean = note.trim().slice(0, 2000);
-  return prisma.order.update({
+  return db.order.update({
     where: { id: orderId },
     data: {
       adminNote: clean || null,
