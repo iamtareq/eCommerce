@@ -70,14 +70,41 @@ export function isSameOrigin(request: Request): boolean {
 export async function readJsonBody(request: Request, maxBytes = 32 * 1024): Promise<unknown> {
   const type = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (type !== "application/json") return undefined;
+  const body = await readBodyLimited(request, maxBytes);
+  if (!body) return undefined;
+  try {
+    return JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Reads a multipart/form-data body with a hard size limit. Returns undefined when the
+ * body is too large or is not valid form data. Like readJsonBody, the body is streamed
+ * and dropped at the limit, so a chunked upload cannot fill the server's memory first.
+ */
+export async function readFormData(request: Request, maxBytes: number): Promise<FormData | undefined> {
+  const type = request.headers.get("content-type");
+  if (!type?.toLowerCase().startsWith("multipart/form-data")) return undefined;
+  const body = await readBodyLimited(request, maxBytes);
+  if (!body) return undefined;
+  try {
+    return await new Response(body, { headers: { "content-type": type } }).formData();
+  } catch {
+    return undefined;
+  }
+}
+
+/** The raw body, or undefined when it is missing, unreadable or larger than maxBytes. */
+async function readBodyLimited(request: Request, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | undefined> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > maxBytes) return undefined;
   try {
     const reader = request.body?.getReader();
     if (!reader) return undefined;
-    const decoder = new TextDecoder();
+    const chunks: Uint8Array[] = [];
     let size = 0;
-    let text = "";
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -86,10 +113,15 @@ export async function readJsonBody(request: Request, maxBytes = 32 * 1024): Prom
         await reader.cancel().catch(() => {});
         return undefined;
       }
-      text += decoder.decode(value, { stream: true });
+      chunks.push(value);
     }
-    text += decoder.decode();
-    return JSON.parse(text);
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return body;
   } catch {
     return undefined;
   }

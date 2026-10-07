@@ -7,7 +7,7 @@ import { requireOwner } from "@/lib/auth/guard";
 import { CATALOG_TAG, REVIEWS_TAG } from "@/lib/catalog";
 import { isUniqueViolation, prisma } from "@/lib/db";
 import { byVariantId } from "@/lib/orders/cart";
-import { deleteImage } from "@/lib/storage";
+import { deleteUnusedImages } from "@/lib/storage";
 import { productInputSchema, type ProductInput } from "@/lib/validation/product";
 
 function refresh(slug?: string) {
@@ -232,7 +232,7 @@ export async function saveProduct(input: ProductInput): Promise<SaveProductResul
       return id;
     });
 
-    await Promise.all(removedImageKeys.map((k) => deleteImage(k)));
+    await deleteUnusedImages(removedImageKeys);
     refresh(p.slug);
     return { ok: true, message: "Product saved", data: { id: productId } };
   } catch (error) {
@@ -273,7 +273,7 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
     prisma.review.updateMany({ where: { productId: id }, data: { isPublished: false } }),
     prisma.product.delete({ where: { id } }),
   ]);
-  await Promise.all(product.images.map((i) => deleteImage(i.storageKey)));
+  await deleteUnusedImages(product.images.map((i) => i.storageKey));
   refresh(product.slug);
   return { ok: true, message: hidden.count ? `Product deleted. Its ${hidden.count} review(s) were unpublished (see Reviews).` : "Product deleted" };
 }

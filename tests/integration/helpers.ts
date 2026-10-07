@@ -91,6 +91,8 @@ export class FakeSheet implements SheetGateway {
   failNext = 0;
   appends = 0;
   updates = 0;
+  /** Lookups that had to read the whole order-number column. */
+  scans = 0;
   delayMs = 0;
   /** Runs after every successful write, e.g. to change the order mid-sync. */
   onWrite: (() => Promise<void>) | null = null;
@@ -105,6 +107,7 @@ export class FakeSheet implements SheetGateway {
   async findRow(orderNumber: string, hint: number | null) {
     await this.maybeFail();
     if (hint && this.rows[hint - 1]?.[0] === orderNumber) return hint;
+    this.scans += 1;
     const index = this.rows.findIndex((r) => r[0] === orderNumber);
     return index >= 0 ? index + 1 : null;
   }
