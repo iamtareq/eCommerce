@@ -131,11 +131,13 @@ export const table = {
   wrap: "relative overflow-x-auto",
   /**
    * Lists whose key columns would scroll off a phone screen show as a card list below `md`
-   * (`cards`, one `card` per row) and as the table from `md` up (`desktopWrap` instead of `wrap`).
+   * (`cards`, one `card` or `cardRow` per row) and as the table from `md` up (`desktopWrap` instead of `wrap`).
    */
   desktopWrap: "relative hidden overflow-x-auto md:block",
   cards: "divide-y divide-line md:hidden",
   card: "block px-4 py-3.5",
+  /** A card laid out as one row (e.g. thumbnail beside text). */
+  cardRow: "flex items-center gap-3 px-4 py-3.5",
   table: "w-full min-w-[640px] text-left text-sm",
   th: "border-b border-line bg-paper px-3 py-2.5 text-xs font-semibold tracking-wide text-muted uppercase first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5",
   td: "border-b border-line px-3 py-3 align-top first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5",

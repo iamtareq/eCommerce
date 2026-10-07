@@ -79,7 +79,7 @@ export default async function ProductsAdminPage() {
             <ul className={table.cards}>
               {rows.map(({ p, active, price, stock }) => (
                 <li key={p.id}>
-                  <Link href={`/admin/products/${p.id}`} className={`${table.card} flex items-center gap-3 hover:bg-paper`}>
+                  <Link href={`/admin/products/${p.id}`} className={`${table.cardRow} hover:bg-paper`}>
                     <Thumb url={p.images[0]?.url} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-start justify-between gap-2">
