@@ -44,7 +44,13 @@ export async function findOrderByIdempotencyKey(idempotencyKey: string): Promise
   return prisma.order.findUnique({ where: { idempotencyKey }, select: refSelect });
 }
 
-type OrderMeta = { ipHash?: string | null; userAgent?: string | null; expectedTotal?: number | null };
+type OrderMeta = {
+  ipHash?: string | null;
+  userAgent?: string | null;
+  expectedTotal?: number | null;
+  /** The caller has just looked this key up and found no order: skip the same lookup here. */
+  keyChecked?: boolean;
+};
 
 /**
  * Creates an order from validated checkout data. Prices, discounts and
@@ -54,8 +60,10 @@ type OrderMeta = { ipHash?: string | null; userAgent?: string | null; expectedTo
  * Idempotent: the same idempotency key always returns the same order.
  */
 export async function createOrder(data: CheckoutData, meta: OrderMeta = {}): Promise<CreateOrderResult> {
-  const existing = await findOrderByIdempotencyKey(data.idempotencyKey);
-  if (existing) return { ok: true, duplicate: true, stockChanged: false, order: existing };
+  if (!meta.keyChecked) {
+    const existing = await findOrderByIdempotencyKey(data.idempotencyKey);
+    if (existing) return { ok: true, duplicate: true, stockChanged: false, order: existing };
+  }
 
   let result: CreateOrderResult;
   try {

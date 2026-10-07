@@ -93,6 +93,7 @@ export async function POST(request: Request) {
         ipHash,
         userAgent: request.headers.get("user-agent"),
         expectedTotal: expected.success ? expected.data : null,
+        keyChecked: true, // looked up above; a same-key race is still caught inside
       });
     } catch (error) {
       await refundAttempt(phoneKey, phoneLimit.resetAt);

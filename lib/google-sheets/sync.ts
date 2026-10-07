@@ -11,9 +11,10 @@ import { getSheetsConfig, type SheetsConfig } from "./config";
  * order carries a version (bumped when sheet-visible data changes) and the
  * version last written to the sheet. A worker claims a short lease on the order,
  * locates the order's row by its order number (column A), updates it or appends
- * a new one, then records the synced version. Because rows are located by order
- * number before appending, a retry never creates a duplicate row — even if a
- * previous attempt wrote the row but crashed before recording it.
+ * a new one, then records the synced version. Because a retry locates the row by
+ * order number before appending, it never creates a duplicate row — even if a
+ * previous attempt wrote the row but crashed before recording it. Only an order's
+ * very first attempt appends without searching: no row can exist for it yet.
  */
 
 export interface SheetGateway {
@@ -129,7 +130,13 @@ export async function syncOrderToSheet(
       const version = order.googleSheetVersion;
       const values = orderToRow(order);
 
-      let row = await gateway.findRow(order.orderNumber, parseRowRef(order.googleSheetRowReference));
+      // This claim counted one attempt. An order never written whose only attempt
+      // is this one cannot have a row yet, so skip reading all of column A: on a
+      // big sheet that read is the slowest, most quota-hungry part of a new order's
+      // sync. Any earlier attempt may have appended before it failed, so search then.
+      const firstWrite =
+        order.googleSheetSyncedVersion === 0 && !order.googleSheetRowReference && order.googleSheetSyncAttempts <= 1;
+      let row = firstWrite ? null : await gateway.findRow(order.orderNumber, parseRowRef(order.googleSheetRowReference));
       if (row) await gateway.updateRow(row, values);
       else row = await gateway.appendRow(values);
 

@@ -45,6 +45,13 @@ describe("Google Sheet sync", () => {
     expect(saved.googleSheetLastSyncAt).not.toBeNull();
   });
 
+  it("appends a new order's first row without reading the whole column", async () => {
+    const o = await placeOrder();
+    expect((await syncOrderToSheet(o.id, { gateway: sheet })).outcome).toBe("synced");
+    expect(sheet.scans).toBe(0);
+    expect(sheet.count(o.orderNumber)).toBe(1);
+  });
+
   it("does nothing when the order is already synced", async () => {
     const o = await placeOrder();
     await syncOrderToSheet(o.id, { gateway: sheet });
@@ -73,6 +80,8 @@ describe("Google Sheet sync", () => {
     const o = await placeOrder();
     const order = await prisma.order.findUniqueOrThrow({ where: { id: o.id }, include: { items: true } });
     sheet.rows.push(orderToRow(order)); // row exists but DB still says PENDING
+    // The crashed attempt had claimed the order, which counted an attempt.
+    await prisma.order.update({ where: { id: o.id }, data: { googleSheetSyncAttempts: 1 } });
     const res = await syncOrderToSheet(o.id, { gateway: sheet });
     expect(res.outcome).toBe("synced");
     expect(sheet.appends).toBe(0);
