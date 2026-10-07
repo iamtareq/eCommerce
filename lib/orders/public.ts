@@ -1,3 +1,5 @@
+import { itemLabel } from "@/config/order";
+import type { OrderStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { normalizeBdPhone, toAsciiDigits } from "@/lib/phone";
 
@@ -18,17 +20,50 @@ export function normalizeOrderNumber(input: string): string {
   return toAsciiDigits(input).replace(/\s+/g, "").toUpperCase();
 }
 
+export interface TrackedOrder {
+  orderNumber: string;
+  status: OrderStatus;
+  /** ISO time the order was placed. */
+  placedAt: string;
+  items: { label: string; quantity: number; total: number }[];
+  giftWrapCharge: number;
+  deliveryCharge: number;
+  discount: number;
+  totalAmount: number;
+}
+
 /**
- * The confirmation-page token of an order, for a customer who lost the link: both the
- * order number and the phone it was placed with must match. Same 60-day window as the link.
+ * An order's status for a customer who lost the link: both the order number and the phone
+ * it was placed with must match. Same 60-day window as the link. Only what the order is and
+ * where it stands comes back; no name, address, phone or link token, since an order number
+ * can be guessed and a phone number is often known to others.
  */
-export async function findOrderTokenForTracking(orderNumber: string, phone: string): Promise<string | null> {
+export async function findOrderForTracking(orderNumber: string, phone: string): Promise<TrackedOrder | null> {
   const number = normalizeOrderNumber(orderNumber);
   const mobile = normalizeBdPhone(phone);
   if (!mobile || !/^[A-Z0-9-]{4,40}$/.test(number)) return null;
   const order = await prisma.order.findFirst({
     where: { orderNumber: number, mobileNumber: mobile, createdAt: { gte: new Date(Date.now() - LINK_TTL_MS) } },
-    select: { publicToken: true },
+    select: {
+      orderNumber: true,
+      orderStatus: true,
+      createdAt: true,
+      giftWrapCharge: true,
+      deliveryCharge: true,
+      discount: true,
+      totalAmount: true,
+      items: { orderBy: { id: "asc" }, select: { productName: true, variantName: true, quantity: true, lineSubtotal: true } },
+    },
   });
-  return order?.publicToken ?? null;
+  if (!order) return null;
+  return {
+    orderNumber: order.orderNumber,
+    status: order.orderStatus,
+    placedAt: order.createdAt.toISOString(),
+    items: order.items.map((i) => ({ label: itemLabel(i.productName, i.variantName), quantity: i.quantity, total: i.lineSubtotal })),
+    giftWrapCharge: order.giftWrapCharge,
+    deliveryCharge: order.deliveryCharge,
+    discount: order.discount,
+    totalAmount: order.totalAmount,
+  };
 }
