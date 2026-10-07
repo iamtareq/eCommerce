@@ -206,20 +206,29 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
       items,
     });
     if (body === leadSent.current) return;
-    const timer = setTimeout(() => {
-      if (submittingRef.current) return;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // Set once the inputs change: this effect's save is stale and must not be retried.
+    let cancelled = false;
+    const send = (attempt: number) => {
+      if (cancelled || submittingRef.current) return;
       leadSent.current = body;
-      // A failed save (network, rate limit) is forgotten, so the next change tries again.
-      const forget = () => {
-        if (leadSent.current === body) leadSent.current = "";
-      };
       fetch("/api/checkout/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true })
-        .then((res) => {
-          if (!res.ok) forget();
-        })
-        .catch(forget);
-    }, 2500);
-    return () => clearTimeout(timer);
+        .then((res) => res.ok)
+        .catch(() => false)
+        .then((ok) => {
+          if (ok) return;
+          // Failed (network, rate limit): forget it so the same values are sent again later, and try
+          // once more after a pause in case the customer stops here. A newer change cancels the retry.
+          if (leadSent.current === body) leadSent.current = "";
+          if (!cancelled && attempt === 0) retry = setTimeout(() => send(1), 8000);
+        });
+    };
+    const timer = setTimeout(() => send(0), 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearTimeout(retry);
+    };
   }, [mobileNumber, customerName, location.districtId, items]);
 
   // After the first submit attempt, re-validate as the customer types.
