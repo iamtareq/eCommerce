@@ -5,6 +5,7 @@ import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
 import { findOrderTokenForTracking } from "@/lib/orders/public";
+import { countOpenLeads, leadSchema, listLeads, saveLead } from "@/lib/leads";
 import { salesReport } from "@/lib/reports";
 import { lowStockVariants, stockCrossedBy } from "@/lib/stock";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
@@ -472,5 +473,40 @@ describe("low stock", () => {
       ["Wall Frame (Small)", 3],
     ]);
     expect(await lowStockVariants(0)).toEqual([]);
+  });
+});
+
+describe("incomplete orders", () => {
+  const lead = (over: Record<string, unknown> = {}) =>
+    leadSchema.parse({ customerName: "Rahim", mobileNumber: "০১৯১১-২২৩৩৪৪", districtId: "dhaka", items: [{ variantId: f.box, quantity: 2 }], ...over });
+
+  it("keeps one entry per phone, priced from the database", async () => {
+    expect(await saveLead(lead(), "ip1")).toBe(true);
+    expect(await saveLead(lead({ customerName: "Rahim Uddin", items: [{ variantId: f.frameSmall, quantity: 1 }] }), "ip1")).toBe(true);
+    const [only, ...rest] = await listLeads();
+    expect(rest).toHaveLength(0);
+    expect(only).toMatchObject({ mobileNumber: "01911223344", customerName: "Rahim Uddin", district: "ঢাকা", subtotal: 1000 });
+    expect(only!.items).toEqual([{ name: "Wall Frame (Small)", quantity: 1 }]);
+    expect(await countOpenLeads()).toBe(1);
+  });
+
+  it("is removed when that phone orders, and not saved again right after", async () => {
+    await saveLead(lead(), null);
+    const r = await createOrder(checkout({ mobileNumber: "01911223344", items: [{ variantId: f.box, quantity: 2 }] }));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(await listLeads()).toEqual([]);
+    expect(await saveLead(lead(), null)).toBe(false); // a late save from the same checkout
+    expect(await listLeads()).toEqual([]);
+  });
+
+  it("skips empty carts and expires after 30 days", async () => {
+    await prisma.productVariant.update({ where: { id: f.box }, data: { isActive: false } });
+    expect(await saveLead(lead(), null)).toBe(false);
+    await prisma.productVariant.update({ where: { id: f.box }, data: { isActive: true } });
+
+    await saveLead(lead(), null);
+    await prisma.checkoutLead.updateMany({ data: { updatedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) } });
+    expect(await listLeads()).toEqual([]);
+    expect(await prisma.checkoutLead.count()).toBe(0);
   });
 });

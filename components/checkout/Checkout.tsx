@@ -10,7 +10,7 @@ import { btn, field } from "@/components/ui/styles";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { formatTakaBn } from "@/lib/money";
-import { toBanglaDigits } from "@/lib/phone";
+import { normalizeBdPhone, toBanglaDigits } from "@/lib/phone";
 import { checkoutSchema, fieldErrors as toFieldErrors, type QuoteInput } from "@/lib/validation/checkout";
 import { MSG } from "@/lib/validation/messages";
 import { FieldError } from "./FieldError";
@@ -192,6 +192,27 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
     }),
     [customerName, mobileNumber, location, address, customerNote, giftMessage, giftWrap, appliedCoupon, items],
   );
+
+  // Unfinished checkout: once the phone is valid, save name, phone and cart (a moment after the
+  // last change) so staff can call to help. The phone field's hint tells the customer.
+  const leadSent = useRef("");
+  useEffect(() => {
+    const phone = normalizeBdPhone(mobileNumber);
+    if (!phone || items.length === 0 || submittingRef.current) return;
+    const body = JSON.stringify({
+      customerName: customerName.trim().slice(0, 80),
+      mobileNumber: phone,
+      districtId: location.districtId || undefined,
+      items,
+    });
+    if (body === leadSent.current) return;
+    const timer = setTimeout(() => {
+      if (submittingRef.current) return;
+      leadSent.current = body;
+      fetch("/api/checkout/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [mobileNumber, customerName, location.districtId, items]);
 
   // After the first submit attempt, re-validate as the customer types.
   useEffect(() => {
@@ -506,7 +527,7 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
                 <FieldError id="mobileNumber-error" message={errors.mobileNumber} />
               ) : (
                 <p id="mobileNumber-hint" className={field.hint}>
-                  এই নম্বরে ফোন করে অর্ডার কনফার্ম করা হবে।
+                  এই নম্বরে ফোন করে অর্ডার কনফার্ম করা হবে। অর্ডার শেষ করতে না পারলে সাহায্যের জন্যও আমরা এই নম্বরে যোগাযোগ করতে পারি।
                 </p>
               )}
             </div>

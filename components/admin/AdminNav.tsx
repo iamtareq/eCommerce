@@ -18,6 +18,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: "dashboard" },
   { href: "/admin/orders", label: "Orders", icon: "list" },
+  { href: "/admin/leads", label: "Incomplete orders", icon: "clock" },
   { href: "/admin/reports", label: "Sales report", icon: "sparkles", owner: true },
   { href: "/admin/products", label: "Products", icon: "package", owner: true },
   { href: "/admin/categories", label: "Categories", icon: "layers", owner: true },

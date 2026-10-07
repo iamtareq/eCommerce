@@ -4,6 +4,7 @@ import { abtn, Badge, Card, Notice, PageHeader, StatCard } from "@/components/ad
 import { requireAdmin } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { getSheetsConfig } from "@/lib/google-sheets/config";
+import { countOpenLeads } from "@/lib/leads";
 import { formatTaka } from "@/lib/money";
 import { dashboardStats } from "@/lib/orders/admin";
 import { getSettingsFresh } from "@/lib/settings";
@@ -33,7 +34,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const admin = await requireAdmin();
   const { denied } = await searchParams;
   const { lowStockThreshold } = await getSettingsFresh();
-  const [stats, recent, productCount, zones, lowStock] = await Promise.all([
+  const [stats, recent, productCount, zones, lowStock, openLeads] = await Promise.all([
     dashboardStats(),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -47,6 +48,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       select: { name: true, charge: true, isDefault: true },
     }),
     lowStockVariants(lowStockThreshold),
+    countOpenLeads(),
   ]);
   const zoneCount = zones.length;
   const freeWarning = freeDeliveryWarning(zones);
@@ -70,6 +72,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <Notice tone="warning">
             Google Sheets is not configured — orders are saved safely in the database but are not copied to the sheet yet. See
             README → &ldquo;Google Sheets&rdquo;.
+          </Notice>
+        )}
+        {openLeads > 0 && (
+          <Notice tone="info">
+            {openLeads} incomplete order{openLeads === 1 ? "" : "s"} to call: people who started checkout but did not finish.{" "}
+            <Link href="/admin/leads" className="font-semibold underline">
+              See them
+            </Link>
           </Notice>
         )}
         {stats.syncFailed > 0 && (

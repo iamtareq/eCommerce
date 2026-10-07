@@ -98,6 +98,8 @@ everything from an admin panel at `/admin`.
   - Site settings: ordering on/off, cash on delivery on/off, gift wrapping price, low-stock alert level, contact
     numbers, announcement, home headline, "Why Deenbox", FAQ, return policy
   - Sales report: revenue, orders, average order, items sold, revenue per day, top products, orders by status
+  - Incomplete orders: checkouts with a valid phone number that were not finished, to call (the checkout tells
+    customers this under the phone field). Removed when that number orders, and after 30 days.
   - Users (Owner / Staff roles)
   - My account (change password)
 - **Roles:** Staff can use the dashboard, orders and their own account. Everything else is Owner-only.

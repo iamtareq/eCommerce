@@ -394,3 +394,25 @@ model Setting {
   value     Json
   updatedAt DateTime @updatedAt
 }
+
+/// A checkout someone started but did not finish: name, phone and cart, saved once the phone
+/// number is valid so staff can call to help. One per phone; removed when that phone places
+/// an order, and after 30 days.
+model CheckoutLead {
+  id           String    @id @default(cuid())
+  mobileNumber String    @unique
+  customerName String
+  /// District name in Bangla, when chosen.
+  district     String?
+  /// [{ name, quantity }] at the time of the last update.
+  items        Json
+  /// Product total at list prices, before discounts and delivery.
+  subtotal     Int
+  ipHash       String?
+  contactedAt  DateTime?
+  contactedBy  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([updatedAt])
+}
