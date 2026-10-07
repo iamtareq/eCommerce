@@ -6,6 +6,7 @@ import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
 import { findOrderTokenForTracking } from "@/lib/orders/public";
 import { salesReport } from "@/lib/reports";
+import { lowStockVariants, stockCrossedBy } from "@/lib/stock";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { checkout, resetDb, seedFixture, type Fixture } from "./helpers";
@@ -445,5 +446,31 @@ describe("sales report", () => {
       { name: "Gift Box", quantity: 1, revenue: 800 },
     ]);
     expect(r.byStatus.find((s) => s.status === "CANCELLED")?.count).toBe(1);
+  });
+});
+
+describe("low stock", () => {
+  it("reports a variant once, by the order that took it to the threshold", async () => {
+    // frameSmall starts at 10; the threshold is 5. The alert runs right after each order.
+    const place = async (phone: string, items: { variantId: string; quantity: number }[]) => {
+      const r = await createOrder(checkout({ mobileNumber: phone, items }));
+      if (!r.ok) throw new Error(JSON.stringify(r));
+      return stockCrossedBy(r.order.id, 5);
+    };
+    expect(await place("01711111111", [{ variantId: f.frameSmall, quantity: 4 }])).toEqual([]); // 10 → 6
+    expect(await place("01811111111", [{ variantId: f.frameSmall, quantity: 2 }, { variantId: f.box, quantity: 1 }])).toEqual([
+      { productId: f.frameProductId, label: "Wall Frame (Small)", stock: 4 },
+    ]); // 6 → 4
+    expect(await place("01822222222", [{ variantId: f.frameSmall, quantity: 1 }])).toEqual([]); // 4 → 3, already low
+
+    const last = await prisma.order.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
+    expect(await stockCrossedBy(last.id, 0)).toEqual([]); // 0 = off
+
+    // Emptiest first; untracked stock (the gift box) never shows.
+    expect((await lowStockVariants(5)).map((v) => [v.label, v.stock])).toEqual([
+      ["Wall Frame (Large)", 2],
+      ["Wall Frame (Small)", 3],
+    ]);
+    expect(await lowStockVariants(0)).toEqual([]);
   });
 });

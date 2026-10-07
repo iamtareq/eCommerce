@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { OrdersTable } from "@/components/admin/OrdersTable";
-import { abtn, Card, Notice, PageHeader, StatCard } from "@/components/admin/ui";
+import { abtn, Badge, Card, Notice, PageHeader, StatCard } from "@/components/admin/ui";
 import { requireAdmin } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { getSheetsConfig } from "@/lib/google-sheets/config";
 import { formatTaka } from "@/lib/money";
 import { dashboardStats } from "@/lib/orders/admin";
+import { getSettingsFresh } from "@/lib/settings";
+import { lowStockVariants } from "@/lib/stock";
 
 export const metadata = { title: "Dashboard" };
 
@@ -30,7 +32,8 @@ function freeDeliveryWarning(zones: { name: string; charge: number; isDefault: b
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const admin = await requireAdmin();
   const { denied } = await searchParams;
-  const [stats, recent, productCount, zones] = await Promise.all([
+  const { lowStockThreshold } = await getSettingsFresh();
+  const [stats, recent, productCount, zones, lowStock] = await Promise.all([
     dashboardStats(),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -43,6 +46,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       orderBy: [{ sortOrder: "asc" }, { charge: "asc" }],
       select: { name: true, charge: true, isDefault: true },
     }),
+    lowStockVariants(lowStockThreshold),
   ]);
   const zoneCount = zones.length;
   const freeWarning = freeDeliveryWarning(zones);
@@ -117,6 +121,32 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <p className="mt-2 text-xs text-muted">
         Today = since midnight Bangladesh time. Revenue excludes cancelled orders. On hold: {stats.onHold} · Processing: {stats.processing}
       </p>
+
+      {lowStock.length > 0 && (
+        <Card title={`Low stock (${lowStockThreshold} or fewer)`} className="mt-6" padded={false}>
+          <ul className="divide-y divide-line">
+            {lowStock.map((v) => {
+              const label = (
+                <>
+                  <span className="min-w-0 font-medium text-ink">{v.label}</span>
+                  <Badge tone={v.stock === 0 ? "red" : "amber"}>{v.stock === 0 ? "Out of stock" : `${v.stock} left`}</Badge>
+                </>
+              );
+              return (
+                <li key={`${v.productId}-${v.label}`}>
+                  {admin.role === "OWNER" ? (
+                    <Link href={`/admin/products/${v.productId}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper sm:px-5">
+                      {label}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">{label}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       <Card
         title="Latest orders"

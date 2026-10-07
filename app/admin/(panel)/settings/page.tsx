@@ -17,6 +17,7 @@ export default async function SettingsPage() {
     duplicateWindowHours: String(s.duplicateWindowHours),
     freeDeliveryMinAmount: s.freeDeliveryMinAmount == null ? "" : String(s.freeDeliveryMinAmount),
     giftWrapPrice: s.giftWrapPrice == null ? "" : String(s.giftWrapPrice),
+    lowStockThreshold: String(s.lowStockThreshold),
     announcement: s.announcement,
     homeHeadline: s.homeHeadline,
     homeSubheadline: s.homeSubheadline,
