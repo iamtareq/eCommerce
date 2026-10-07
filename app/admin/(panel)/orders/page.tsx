@@ -57,8 +57,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       />
 
       <Card className="mb-4">
-        <form method="get" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
-          <div>
+        <form method="get" className="grid grid-cols-2 gap-3 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
+          <div className="col-span-2 lg:col-span-1">
             <label htmlFor="q" className={alabel}>
               Search
             </label>
@@ -102,7 +102,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </label>
             <input id="to" name="to" type="date" defaultValue={filters.to} className={ainput} />
           </div>
-          <div className="flex items-end gap-2">
+          <div className="col-span-2 flex items-end gap-2 lg:col-span-1">
             <button type="submit" className={cn(abtn.primary, abtn.md)}>
               <Icon name="search" className="size-4" /> Filter
             </button>
@@ -112,7 +112,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               </Link>
             )}
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink-soft sm:col-span-2 lg:col-span-6">
+          <label className="col-span-2 flex items-center gap-2 text-sm text-ink-soft lg:col-span-6">
             <input type="checkbox" name="flagged" value="1" defaultChecked={filters.flagged} className="size-4 accent-pine-700" />
             Only flagged orders (same phone ordered recently)
           </label>

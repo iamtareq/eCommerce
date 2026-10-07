@@ -556,7 +556,7 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
               <button
                 type="button"
                 onClick={() => setCouponOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-pine-700 hover:text-pine-900"
+                className="-my-2.5 inline-flex items-center gap-1.5 py-2.5 text-sm font-semibold text-pine-700 hover:text-pine-900"
               >
                 <Icon name="tag" className="size-4" /> কুপন কোড আছে?
               </button>
