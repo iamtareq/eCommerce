@@ -7,6 +7,7 @@ import { SuccessTracker } from "@/components/store/SuccessTracker";
 import { Icon } from "@/components/ui/Icon";
 import { btn } from "@/components/ui/styles";
 import { itemLabel, orderStatusLabelBn } from "@/config/order";
+import type { OrderStatus } from "@/generated/prisma/enums";
 import { getFacebookPageUrl } from "@/config/site";
 import { cn } from "@/lib/cn";
 import { formatDateBn } from "@/lib/dates";
@@ -21,26 +22,86 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function OrderSuccessPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+const PROGRESS: { status: OrderStatus; label: string }[] = [
+  { status: "PENDING", label: "অর্ডার গ্রহণ" },
+  { status: "CONFIRMED", label: "কনফার্মড" },
+  { status: "PROCESSING", label: "প্রস্তুত হচ্ছে" },
+  { status: "SHIPPED", label: "পাঠানো হয়েছে" },
+  { status: "DELIVERED", label: "ডেলিভারি সম্পন্ন" },
+];
+
+/** Where the order is in its journey; a cancelled order says so instead. */
+function OrderProgress({ status }: { status: OrderStatus }) {
+  if (status === "CANCELLED") {
+    return (
+      <p className="flex items-start gap-2.5 rounded-xl border border-danger-600/30 bg-danger-50 p-4 text-left font-medium text-danger-700">
+        <Icon name="x" className="mt-0.5 size-5 shrink-0" />
+        অর্ডারটি বাতিল করা হয়েছে। কোনো প্রশ্ন থাকলে আমাদের ফেসবুক পেজে মেসেজ দিন।
+      </p>
+    );
+  }
+  // On hold sits between placing and confirming.
+  const reached = status === "ON_HOLD" ? 0 : PROGRESS.findIndex((p) => p.status === status);
+  return (
+    <div>
+      <ol className="grid grid-cols-5 gap-1" aria-label="অর্ডারের অগ্রগতি">
+        {PROGRESS.map((p, i) => (
+          <li key={p.status} className="flex flex-col items-center gap-2 text-center" aria-current={i === reached ? "step" : undefined}>
+            <span
+              className={cn(
+                "grid size-9 place-items-center rounded-full border-2 text-sm font-bold",
+                i < reached && "border-pine-700 bg-pine-700 text-white",
+                i === reached && "border-pine-700 bg-pine-50 text-pine-800 ring-4 ring-pine-600/15",
+                i > reached && "border-line-strong bg-surface text-muted",
+              )}
+            >
+              {i < reached ? <Icon name="check" className="size-4.5" /> : toBanglaDigits(i + 1)}
+            </span>
+            <span className={cn("text-[0.8rem] leading-tight sm:text-sm", i <= reached ? "font-semibold text-ink" : "text-muted")}>{p.label}</span>
+          </li>
+        ))}
+      </ol>
+      {status === "ON_HOLD" && (
+        <p className="mt-4 rounded-xl bg-brass-50 p-3 text-sm text-brass-800">অর্ডারটি এই মুহূর্তে হোল্ডে আছে। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।</p>
+      )}
+    </div>
+  );
+}
+
+export default async function OrderSuccessPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const [{ token }, { view }] = await Promise.all([params, searchParams]);
   const order = await findOrderByPublicToken(token);
   if (!order) notFound();
+  // Opened from order tracking (maybe days later, on another device): show the status, not a fresh "success".
+  const statusView = view === "status";
 
   const settings = await getSettings();
   const facebookUrl = settings.facebookPageUrl || getFacebookPageUrl();
 
   return (
     <section className="bg-sand py-10 sm:py-14">
-      <SuccessTracker orderNumber={order.orderNumber} value={order.totalAmount} itemCount={order.itemCount} />
+      {!statusView && <SuccessTracker orderNumber={order.orderNumber} value={order.totalAmount} itemCount={order.itemCount} />}
       <div className="mx-auto max-w-2xl px-4 sm:px-6">
         <div className="rounded-card border border-line bg-surface p-6 text-center shadow-soft sm:p-8">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-success-50 text-success-700">
-            <Icon name="checkCircle" className="size-9" />
-          </span>
-          <h1 className="mt-4 text-balance text-[1.6rem] font-semibold text-pine-900 sm:text-[2rem]">
-            অর্ডার সফলভাবে গ্রহণ করা হয়েছে! 🎉
-          </h1>
-          <p className="mt-2 text-muted">{MSG.success}</p>
+          {statusView ? (
+            <h1 className="text-balance text-[1.6rem] font-semibold text-pine-900 sm:text-[2rem]">আপনার অর্ডারের অবস্থা</h1>
+          ) : (
+            <>
+              <span className="mx-auto grid size-16 place-items-center rounded-full bg-success-50 text-success-700">
+                <Icon name="checkCircle" className="size-9" />
+              </span>
+              <h1 className="mt-4 text-balance text-[1.6rem] font-semibold text-pine-900 sm:text-[2rem]">
+                অর্ডার সফলভাবে গ্রহণ করা হয়েছে! 🎉
+              </h1>
+              <p className="mt-2 text-muted">{MSG.success}</p>
+            </>
+          )}
 
           <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-brass-300 bg-brass-50 p-4">
             <p className="text-sm font-medium text-brass-800">আপনার অর্ডার নম্বর</p>
@@ -50,10 +111,16 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ t
             </div>
           </div>
 
-          <p className="mx-auto mt-6 flex max-w-md items-start gap-2.5 rounded-xl bg-pine-50 p-4 text-left text-[0.97rem] leading-7 text-pine-900">
-            <Icon name="phone" className="mt-1 size-5 shrink-0 text-pine-700" />
-            আমাদের প্রতিনিধি শীঘ্রই {toBanglaDigits(maskPhone(order.mobileNumber))} নম্বরে ফোন করে আপনার অর্ডারটি কনফার্ম করবেন। অনুগ্রহ করে ফোনটি কাছে রাখুন।
-          </p>
+          <div className="mt-6">
+            <OrderProgress status={order.orderStatus} />
+          </div>
+
+          {order.orderStatus === "PENDING" && (
+            <p className="mx-auto mt-6 flex max-w-md items-start gap-2.5 rounded-xl bg-pine-50 p-4 text-left text-[0.97rem] leading-7 text-pine-900">
+              <Icon name="phone" className="mt-1 size-5 shrink-0 text-pine-700" />
+              আমাদের প্রতিনিধি শীঘ্রই {toBanglaDigits(maskPhone(order.mobileNumber))} নম্বরে ফোন করে আপনার অর্ডারটি কনফার্ম করবেন। অনুগ্রহ করে ফোনটি কাছে রাখুন।
+            </p>
+          )}
         </div>
 
         <div className="mt-5 rounded-card border border-line bg-surface p-5 shadow-soft sm:p-6">
@@ -149,7 +216,13 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ t
             <Icon name="bag" className="size-5" /> আবার অর্ডার করুন
           </Link>
         </div>
-        <p className="mt-5 text-center text-sm text-muted">এই পেজের লিংকটি সংরক্ষণ করে রাখতে পারেন।</p>
+        <p className="mt-5 text-center text-sm text-muted">
+          এই পেজের লিংকটি সংরক্ষণ করে রাখতে পারেন। লিংক হারালে{" "}
+          <Link href="/track" className="font-semibold text-pine-700 underline">
+            অর্ডার ট্র্যাক
+          </Link>{" "}
+          পেজে অর্ডার নম্বর ও মোবাইল নম্বর দিয়ে অবস্থা দেখতে পারবেন।
+        </p>
       </div>
     </section>
   );

@@ -4,6 +4,7 @@ import { dhakaDateKey } from "@/lib/dates";
 import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
+import { findOrderTokenForTracking } from "@/lib/orders/public";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { checkout, resetDb, seedFixture, type Fixture } from "./helpers";
@@ -375,5 +376,26 @@ describe("admin order management", () => {
     expect((await listOrders({ q: r.order.orderNumber.toLowerCase() })).total).toBe(1);
     expect((await listOrders({ status: "PENDING" })).total).toBe(2);
     expect((await listOrders({ status: "DELIVERED" })).total).toBe(0);
+  });
+});
+
+describe("order tracking", () => {
+  it("finds an order only by its number together with the phone it was placed with", async () => {
+    const r = await createOrder(checkout({ mobileNumber: "01911223344", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const n = r.order.orderNumber;
+
+    expect(await findOrderTokenForTracking(n, "01911223344")).toBe(r.order.publicToken);
+    // Typed loosely: lower case, spaces, Bangla digits, +880 prefix.
+    const bn = (s: string) => s.replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]!);
+    expect(await findOrderTokenForTracking(` ${bn(n.toLowerCase())} `, "+880 1911-223344")).toBe(r.order.publicToken);
+
+    expect(await findOrderTokenForTracking(n, "01700000000")).toBeNull();
+    expect(await findOrderTokenForTracking("DBX-19990101-0001", "01911223344")).toBeNull();
+    expect(await findOrderTokenForTracking(n, "not a phone")).toBeNull();
+
+    // Past the 60-day link window, like the link itself.
+    await prisma.order.update({ where: { id: r.order.id }, data: { createdAt: new Date(Date.now() - 61 * 24 * 60 * 60 * 1000) } });
+    expect(await findOrderTokenForTracking(n, "01911223344")).toBeNull();
   });
 });

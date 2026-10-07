@@ -47,6 +47,8 @@ export const LIMITS = {
   orderPerPhone: { limit: 4, windowMs: 10 * 60 * 1000 },
   quotePerIp: { limit: 120, windowMs: 60 * 1000 },
   couponPerIp: { limit: 20, windowMs: 10 * 60 * 1000 },
+  // Order lookups by number + phone: enough for a customer's typos, too few to guess other people's orders.
+  trackPerIp: { limit: 10, windowMs: 10 * 60 * 1000 },
   loginPerIp: { limit: 10, windowMs: 15 * 60 * 1000 },
   loginPerUserIp: { limit: 5, windowMs: 15 * 60 * 1000 },
   // Backstop against guessing one account's password from many IPs. Looser than one
