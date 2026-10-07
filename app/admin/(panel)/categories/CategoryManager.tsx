@@ -30,6 +30,10 @@ type Result = { tone: "success" | "error"; text: string } | null;
 
 const EMPTY: CategoryFormValue = { name: "", slug: "", description: "", sortOrder: "0", isActive: true };
 
+function CategoryStatus({ active }: { active: boolean }) {
+  return active ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Hidden</Badge>;
+}
+
 function toFormValue(c: CategoryRow): CategoryFormValue {
   return { id: c.id, name: c.name, slug: c.slug, description: c.description ?? "", sortOrder: String(c.sortOrder), isActive: c.isActive };
 }
@@ -117,12 +121,12 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
                         {c.description && <span className="mt-0.5 line-clamp-2 block max-w-md text-xs text-muted">{c.description}</span>}
                         {/* On phones the other columns start off-screen; show the essentials here too. */}
                         <span className="mt-1 flex items-center gap-2 text-xs text-muted md:hidden">
-                          {c.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Hidden</Badge>}
+                          <CategoryStatus active={c.isActive} />
                           {c.productCount} product{c.productCount === 1 ? "" : "s"}
                         </span>
                       </td>
                       <td className={`${table.td} font-mono text-xs text-ink-soft`}>{c.slug}</td>
-                      <td className={table.td}>{c.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Hidden</Badge>}</td>
+                      <td className={table.td}><CategoryStatus active={c.isActive} /></td>
                       <td className={`${table.td} text-right tabular-nums`}>{c.sortOrder}</td>
                       <td className={`${table.td} text-right tabular-nums`}>{c.productCount}</td>
                       {/* Pinned to the right edge (see table.actionsTd); text labels hidden on phones to keep it narrow. */}
