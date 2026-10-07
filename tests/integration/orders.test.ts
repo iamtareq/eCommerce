@@ -4,6 +4,10 @@ import { dhakaDateKey } from "@/lib/dates";
 import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
+import { findOrderTokenForTracking } from "@/lib/orders/public";
+import { countOpenLeads, leadSchema, listLeads, saveLead } from "@/lib/leads";
+import { salesReport } from "@/lib/reports";
+import { lowStockVariants, stockCrossedBy } from "@/lib/stock";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { checkout, resetDb, seedFixture, type Fixture } from "./helpers";
@@ -208,6 +212,26 @@ describe("createOrder", () => {
     expect(o.deliveryCharge).toBe(0);
     expect(o.totalAmount).toBe(3000 - 300);
   });
+  it("adds gift wrapping at the configured price, and only when the store offers it", async () => {
+    // Not offered: asking for it adds nothing, but the gift message is kept.
+    const off = await createOrder(checkout({ giftWrap: true, giftMessage: "ঈদ মোবারক!", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!off.ok) throw new Error(JSON.stringify(off));
+    const o1 = await prisma.order.findUniqueOrThrow({ where: { id: off.order.id } });
+    expect([o1.giftWrap, o1.giftWrapCharge, o1.giftMessage, o1.totalAmount]).toEqual([false, 0, "ঈদ মোবারক!", 800 + 70]);
+
+    await saveSettings(siteSettingsSchema.parse({ giftWrapPrice: 50, freeDeliveryMinAmount: 800 }));
+    const quote = await buildQuote({ items: [{ variantId: f.box, quantity: 1 }], districtId: "dhaka", areaId: "dhaka-city-dhanmondi", giftWrap: true });
+    expect([quote.giftWrapCharge, quote.giftWrapPrice, quote.total]).toEqual([50, 50, 800 + 50]);
+
+    // The customer confirmed the quote's total; the order matches it. Wrapping is not discounted
+    // and does not count toward free delivery (800 of products reaches the 800 threshold on its own).
+    const on = await createOrder(checkout({ mobileNumber: "01811111111", giftWrap: true, items: [{ variantId: f.box, quantity: 1 }] }), {
+      expectedTotal: quote.total,
+    });
+    if (!on.ok) throw new Error(JSON.stringify(on));
+    const o2 = await prisma.order.findUniqueOrThrow({ where: { id: on.order.id } });
+    expect([o2.giftWrap, o2.giftWrapCharge, o2.deliveryCharge, o2.totalAmount]).toEqual([true, 50, 0, 850]);
+  });
 });
 
 describe("buildQuote", () => {
@@ -375,5 +399,114 @@ describe("admin order management", () => {
     expect((await listOrders({ q: r.order.orderNumber.toLowerCase() })).total).toBe(1);
     expect((await listOrders({ status: "PENDING" })).total).toBe(2);
     expect((await listOrders({ status: "DELIVERED" })).total).toBe(0);
+  });
+});
+
+describe("order tracking", () => {
+  it("finds an order only by its number together with the phone it was placed with", async () => {
+    const r = await createOrder(checkout({ mobileNumber: "01911223344", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const n = r.order.orderNumber;
+
+    expect(await findOrderTokenForTracking(n, "01911223344")).toBe(r.order.publicToken);
+    // Typed loosely: lower case, spaces, Bangla digits, +880 prefix.
+    const bn = (s: string) => s.replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]!);
+    expect(await findOrderTokenForTracking(` ${bn(n.toLowerCase())} `, "+880 1911-223344")).toBe(r.order.publicToken);
+
+    expect(await findOrderTokenForTracking(n, "01700000000")).toBeNull();
+    expect(await findOrderTokenForTracking("DBX-19990101-0001", "01911223344")).toBeNull();
+    expect(await findOrderTokenForTracking(n, "not a phone")).toBeNull();
+
+    // Past the 60-day link window, like the link itself.
+    await prisma.order.update({ where: { id: r.order.id }, data: { createdAt: new Date(Date.now() - 61 * 24 * 60 * 60 * 1000) } });
+    expect(await findOrderTokenForTracking(n, "01911223344")).toBeNull();
+  });
+});
+
+describe("sales report", () => {
+  it("sums live orders per Dhaka day and leaves cancelled ones out of revenue", async () => {
+    const a = await createOrder(checkout({ items: [{ variantId: f.frameSmall, quantity: 2 }] })); // 2000 − 200 + 70
+    const b = await createOrder(checkout({ mobileNumber: "01811111111", items: [{ variantId: f.box, quantity: 1 }] })); // 800 + 70
+    const c = await createOrder(checkout({ mobileNumber: "01822222222", items: [{ variantId: f.box, quantity: 3 }] }));
+    if (!a.ok || !b.ok || !c.ok) throw new Error("orders failed");
+    await updateOrderStatus(c.order.id, "CANCELLED", actor);
+    // 23:30 Dhaka time on the 1st is still the 1st, though it is already 17:30 UTC.
+    await prisma.order.update({ where: { id: b.order.id }, data: { createdAt: new Date("2026-09-01T17:30:00Z") } });
+    await prisma.order.update({ where: { id: a.order.id }, data: { createdAt: new Date("2026-09-02T04:00:00Z") } });
+    await prisma.order.update({ where: { id: c.order.id }, data: { createdAt: new Date("2026-09-02T05:00:00Z") } });
+
+    const r = await salesReport({ from: "2026-09-01", to: "2026-09-03", preset: null });
+    expect(r.days).toEqual([
+      { date: "2026-09-01", orders: 1, revenue: 870 },
+      { date: "2026-09-02", orders: 1, revenue: 1870 },
+      { date: "2026-09-03", orders: 0, revenue: 0 },
+    ]);
+    expect([r.orders, r.revenue, r.averageOrder, r.itemsSold, r.cancelled]).toEqual([2, 2740, 1370, 3, 1]);
+    expect(r.topProducts).toEqual([
+      { name: "Wall Frame (Small)", quantity: 2, revenue: 1800 },
+      { name: "Gift Box", quantity: 1, revenue: 800 },
+    ]);
+    expect(r.byStatus.find((s) => s.status === "CANCELLED")?.count).toBe(1);
+  });
+});
+
+describe("low stock", () => {
+  it("reports a variant once, by the order that took it to the threshold", async () => {
+    // frameSmall starts at 10; the threshold is 5. The alert runs right after each order.
+    const place = async (phone: string, items: { variantId: string; quantity: number }[]) => {
+      const r = await createOrder(checkout({ mobileNumber: phone, items }));
+      if (!r.ok) throw new Error(JSON.stringify(r));
+      return stockCrossedBy(r.order.id, 5);
+    };
+    expect(await place("01711111111", [{ variantId: f.frameSmall, quantity: 4 }])).toEqual([]); // 10 → 6
+    expect(await place("01811111111", [{ variantId: f.frameSmall, quantity: 2 }, { variantId: f.box, quantity: 1 }])).toEqual([
+      { productId: f.frameProductId, label: "Wall Frame (Small)", stock: 4 },
+    ]); // 6 → 4
+    expect(await place("01822222222", [{ variantId: f.frameSmall, quantity: 1 }])).toEqual([]); // 4 → 3, already low
+
+    const last = await prisma.order.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
+    expect(await stockCrossedBy(last.id, 0)).toEqual([]); // 0 = off
+
+    // Emptiest first; untracked stock (the gift box) never shows.
+    expect((await lowStockVariants(5)).map((v) => [v.label, v.stock])).toEqual([
+      ["Wall Frame (Large)", 2],
+      ["Wall Frame (Small)", 3],
+    ]);
+    expect(await lowStockVariants(0)).toEqual([]);
+  });
+});
+
+describe("incomplete orders", () => {
+  const lead = (over: Record<string, unknown> = {}) =>
+    leadSchema.parse({ customerName: "Rahim", mobileNumber: "০১৯১১-২২৩৩৪৪", districtId: "dhaka", items: [{ variantId: f.box, quantity: 2 }], ...over });
+
+  it("keeps one entry per phone, priced from the database", async () => {
+    expect(await saveLead(lead(), "ip1")).toBe(true);
+    expect(await saveLead(lead({ customerName: "Rahim Uddin", items: [{ variantId: f.frameSmall, quantity: 1 }] }), "ip1")).toBe(true);
+    const [only, ...rest] = await listLeads();
+    expect(rest).toHaveLength(0);
+    expect(only).toMatchObject({ mobileNumber: "01911223344", customerName: "Rahim Uddin", district: "ঢাকা", subtotal: 1000 });
+    expect(only!.items).toEqual([{ name: "Wall Frame (Small)", quantity: 1 }]);
+    expect(await countOpenLeads()).toBe(1);
+  });
+
+  it("is removed when that phone orders, and not saved again right after", async () => {
+    await saveLead(lead(), null);
+    const r = await createOrder(checkout({ mobileNumber: "01911223344", items: [{ variantId: f.box, quantity: 2 }] }));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(await listLeads()).toEqual([]);
+    expect(await saveLead(lead(), null)).toBe(false); // a late save from the same checkout
+    expect(await listLeads()).toEqual([]);
+  });
+
+  it("skips empty carts and expires after 30 days", async () => {
+    await prisma.productVariant.update({ where: { id: f.box }, data: { isActive: false } });
+    expect(await saveLead(lead(), null)).toBe(false);
+    await prisma.productVariant.update({ where: { id: f.box }, data: { isActive: true } });
+
+    await saveLead(lead(), null);
+    await prisma.checkoutLead.updateMany({ data: { updatedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) } });
+    expect(await listLeads()).toEqual([]);
+    expect(await prisma.checkoutLead.count()).toBe(0);
   });
 });

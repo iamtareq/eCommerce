@@ -67,6 +67,7 @@ export function OrderSummary({ lines, quote, loading }: { lines: CheckoutLine[];
             )
           }
         />
+        {quote && quote.giftWrapCharge > 0 && <Row label="গিফট র‍্যাপ" value={formatTakaBn(quote.giftWrapCharge)} />}
         {quote && quote.discount > 0 && <Row label="মোট ছাড়" value={`− ${formatTakaBn(quote.discount)}`} tone="muted" />}
         <div className="border-t border-line pt-3">
           <Row

@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { OrdersTable } from "@/components/admin/OrdersTable";
-import { abtn, Card, Notice, PageHeader, StatCard } from "@/components/admin/ui";
+import { abtn, Badge, Card, Notice, PageHeader, StatCard } from "@/components/admin/ui";
 import { requireAdmin } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { getSheetsConfig } from "@/lib/google-sheets/config";
+import { countOpenLeads } from "@/lib/leads";
 import { formatTaka } from "@/lib/money";
 import { dashboardStats } from "@/lib/orders/admin";
+import { getSettingsFresh } from "@/lib/settings";
+import { lowStockVariants } from "@/lib/stock";
 
 export const metadata = { title: "Dashboard" };
 
@@ -30,7 +33,8 @@ function freeDeliveryWarning(zones: { name: string; charge: number; isDefault: b
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const admin = await requireAdmin();
   const { denied } = await searchParams;
-  const [stats, recent, productCount, zones] = await Promise.all([
+  const { lowStockThreshold } = await getSettingsFresh();
+  const [stats, recent, productCount, zones, lowStock, openLeads] = await Promise.all([
     dashboardStats(),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -43,6 +47,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       orderBy: [{ sortOrder: "asc" }, { charge: "asc" }],
       select: { name: true, charge: true, isDefault: true },
     }),
+    lowStockVariants(lowStockThreshold),
+    countOpenLeads(),
   ]);
   const zoneCount = zones.length;
   const freeWarning = freeDeliveryWarning(zones);
@@ -66,6 +72,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <Notice tone="warning">
             Google Sheets is not configured — orders are saved safely in the database but are not copied to the sheet yet. See
             README → &ldquo;Google Sheets&rdquo;.
+          </Notice>
+        )}
+        {openLeads > 0 && (
+          <Notice tone="info">
+            {openLeads} incomplete order{openLeads === 1 ? "" : "s"} to call: people who started checkout but did not finish.{" "}
+            <Link href="/admin/leads" className="font-semibold underline">
+              See them
+            </Link>
           </Notice>
         )}
         {stats.syncFailed > 0 && (
@@ -117,6 +131,32 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <p className="mt-2 text-xs text-muted">
         Today = since midnight Bangladesh time. Revenue excludes cancelled orders. On hold: {stats.onHold} · Processing: {stats.processing}
       </p>
+
+      {lowStock.length > 0 && (
+        <Card title={`Low stock (${lowStockThreshold} or fewer)`} className="mt-6" padded={false}>
+          <ul className="divide-y divide-line">
+            {lowStock.map((v) => {
+              const label = (
+                <>
+                  <span className="min-w-0 font-medium text-ink">{v.label}</span>
+                  <Badge tone={v.stock === 0 ? "red" : "amber"}>{v.stock === 0 ? "Out of stock" : `${v.stock} left`}</Badge>
+                </>
+              );
+              return (
+                <li key={`${v.productId}-${v.label}`}>
+                  {admin.role === "OWNER" ? (
+                    <Link href={`/admin/products/${v.productId}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper sm:px-5">
+                      {label}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">{label}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       <Card
         title="Latest orders"

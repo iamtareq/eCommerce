@@ -5,6 +5,7 @@ import { resolveLocation } from "@/lib/locations";
 import { getLocationData } from "@/lib/locations.server";
 import { calculatePricing, type PricingResult } from "@/lib/pricing";
 import { randomToken } from "@/lib/security";
+import { clearLead } from "@/lib/leads";
 import { getSettingsFresh } from "@/lib/settings";
 import type { CheckoutData } from "@/lib/validation/checkout";
 import { MSG } from "@/lib/validation/messages";
@@ -127,6 +128,8 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
       coupon: couponRule,
       deliveryCharge: zone.charge,
       freeDeliveryMinAmount: settings.freeDeliveryMinAmount,
+      // Wrapping asked for while the store does not offer it adds nothing (the quote showed no such option).
+      giftWrapCharge: data.giftWrap ? (settings.giftWrapPrice ?? 0) : 0,
     });
     if (pricing.coupon && !pricing.coupon.applied) {
       const message = couponReasonMessage(pricing.coupon.reason) ?? MSG.cartChanged;
@@ -232,6 +235,9 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
             areaId: location.area?.id ?? null,
             address: data.address,
             customerNote: data.customerNote ?? null,
+            giftMessage: data.giftMessage ?? null,
+            giftWrap: pricing.giftWrapCharge > 0,
+            giftWrapCharge: pricing.giftWrapCharge,
             itemCount: pricing.itemCount,
             subtotal: pricing.subtotal,
             quantityDiscount: pricing.quantityDiscount,
@@ -268,6 +274,8 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
       },
       { timeout: 15_000 },
     );
+    // The phone finished its checkout: it is no longer an incomplete order to call about.
+    await clearLead(data.mobileNumber).catch((e) => console.error("[orders] clearing lead failed", e));
     return { ok: true, duplicate: false, stockChanged, order };
   } catch (error) {
     if (error instanceof CartConflict) return { ok: false, code: "CART", message: MSG.cartChanged, issues: error.issues };

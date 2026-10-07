@@ -10,7 +10,7 @@ import { btn, field } from "@/components/ui/styles";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { formatTakaBn } from "@/lib/money";
-import { toBanglaDigits } from "@/lib/phone";
+import { normalizeBdPhone, toBanglaDigits } from "@/lib/phone";
 import { checkoutSchema, fieldErrors as toFieldErrors, type QuoteInput } from "@/lib/validation/checkout";
 import { MSG } from "@/lib/validation/messages";
 import { FieldError } from "./FieldError";
@@ -79,6 +79,8 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   const [location, setLocation] = useState<LocationValue>({ divisionId: "", districtId: "", areaId: "", areaOther: "" });
   const [address, setAddress] = useState("");
   const [customerNote, setCustomerNote] = useState("");
+  const [giftMessage, setGiftMessage] = useState("");
+  const [giftWrap, setGiftWrap] = useState(false);
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
@@ -128,12 +130,13 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   );
 
   const items = useMemo(() => lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), [lines]);
-  const inputKey = JSON.stringify([items, location.districtId, location.areaId, appliedCoupon]);
+  const inputKey = JSON.stringify([items, location.districtId, location.areaId, appliedCoupon, giftWrap]);
   const quoteInput: QuoteInput = {
     items,
     districtId: location.districtId || undefined,
     areaId: location.areaId || undefined,
     couponCode: appliedCoupon || undefined,
+    giftWrap,
   };
 
   // ─── Live quote from the server (debounced; stale responses discarded).
@@ -181,12 +184,35 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
       areaOther: location.areaOther || undefined,
       address,
       customerNote: customerNote || undefined,
+      giftMessage: giftMessage || undefined,
+      giftWrap,
       couponCode: appliedCoupon || undefined,
       items,
       idempotencyKey: idempotencyKey.current || "x".repeat(16),
     }),
-    [customerName, mobileNumber, location, address, customerNote, appliedCoupon, items],
+    [customerName, mobileNumber, location, address, customerNote, giftMessage, giftWrap, appliedCoupon, items],
   );
+
+  // Unfinished checkout: once the phone is valid, save name, phone and cart (a moment after the
+  // last change) so staff can call to help. The phone field's hint tells the customer.
+  const leadSent = useRef("");
+  useEffect(() => {
+    const phone = normalizeBdPhone(mobileNumber);
+    if (!phone || items.length === 0 || submittingRef.current) return;
+    const body = JSON.stringify({
+      customerName: customerName.trim().slice(0, 80),
+      mobileNumber: phone,
+      districtId: location.districtId || undefined,
+      items,
+    });
+    if (body === leadSent.current) return;
+    const timer = setTimeout(() => {
+      if (submittingRef.current) return;
+      leadSent.current = body;
+      fetch("/api/checkout/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [mobileNumber, customerName, location.districtId, items]);
 
   // After the first submit attempt, re-validate as the customer types.
   useEffect(() => {
@@ -501,7 +527,7 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
                 <FieldError id="mobileNumber-error" message={errors.mobileNumber} />
               ) : (
                 <p id="mobileNumber-hint" className={field.hint}>
-                  এই নম্বরে ফোন করে অর্ডার কনফার্ম করা হবে।
+                  এই নম্বরে ফোন করে অর্ডার কনফার্ম করা হবে। অর্ডার শেষ করতে না পারলে সাহায্যের জন্যও আমরা এই নম্বরে যোগাযোগ করতে পারি।
                 </p>
               )}
             </div>
@@ -541,9 +567,47 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
               onChange={(e) => setCustomerNote(e.target.value)}
               maxLength={500}
               rows={2}
-              placeholder="যেমন: গিফট র‍্যাপিং চাই / বিকেলে ফোন করবেন"
+              placeholder="যেমন: বিকেলে ফোন করবেন"
             />
           </div>
+          <fieldset className="mt-4 rounded-xl border border-brass-300/70 bg-brass-50/60 p-4">
+            <legend className="sr-only">উপহার</legend>
+            <p className="flex items-center gap-2 font-semibold text-ink">
+              <Icon name="gift" className="size-5 text-brass-700" />
+              উপহার হিসেবে পাঠাচ্ছেন? <span className="font-normal text-muted">(ঐচ্ছিক)</span>
+            </p>
+            {quote?.giftWrapPrice != null && (
+              <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3">
+                <input
+                  type="checkbox"
+                  name="giftWrap"
+                  checked={giftWrap}
+                  onChange={(e) => setGiftWrap(e.target.checked)}
+                  className="mt-1 size-5 shrink-0 accent-pine-700"
+                />
+                <span>
+                  <span className="block font-semibold text-ink">
+                    গিফট র‍্যাপ করে দিন <span className="font-bold text-pine-800">+{formatTakaBn(quote.giftWrapPrice)}</span>
+                  </span>
+                  <span className="block text-sm text-muted">উপহারের মতো সুন্দর করে মুড়িয়ে পাঠানো হবে</span>
+                </span>
+              </label>
+            )}
+            <label htmlFor="giftMessage" className={cn(field.label, "mt-3")}>
+              উপহার বার্তা
+            </label>
+            <textarea
+              id="giftMessage"
+              name="giftMessage"
+              className={cn(field.textarea, "min-h-20")}
+              value={giftMessage}
+              onChange={(e) => setGiftMessage(e.target.value)}
+              maxLength={300}
+              rows={2}
+              placeholder="যেমন: প্রিয় আম্মু, ঈদ মোবারক! — তোমার রাফি"
+            />
+            <p className={field.hint}>যিনি উপহার পাবেন, তাঁর জন্য আপনার শুভেচ্ছা বার্তা</p>
+          </fieldset>
         </Card>
       </div>
 

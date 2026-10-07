@@ -66,8 +66,12 @@ export const siteSettingsSchema = z.object({
   cashOnDelivery: z.boolean().default(false),
   /** Orders whose product total (after discounts) reaches this amount get free delivery. Null = off. */
   freeDeliveryMinAmount: z.number().int().min(1).max(10_000_000).nullable().default(null),
+  /** Price of gift wrapping, which customers can add at checkout. Null = not offered (the option is hidden). */
+  giftWrapPrice: z.number().int().min(1).max(100_000).nullable().default(null),
   /** Max total quantity per product per order when the product has no own limit. */
   defaultMaxPerOrder: z.number().int().min(1).max(999).default(10),
+  /** Stock at or below this counts as low: listed on the dashboard and alerted on Telegram. 0 = off. */
+  lowStockThreshold: z.number().int().min(0).max(9999).default(5),
   /** Flag an order when the same phone ordered within this many hours. 0 = off. */
   duplicateWindowHours: z.number().int().min(0).max(720).default(24),
 

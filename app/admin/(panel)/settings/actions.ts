@@ -15,6 +15,8 @@ const LABELS: Record<string, string> = {
   defaultMaxPerOrder: "Default max quantity per product",
   duplicateWindowHours: "Repeat-order check window",
   freeDeliveryMinAmount: "Free delivery minimum",
+  giftWrapPrice: "Gift wrapping price",
+  lowStockThreshold: "Low stock alert",
   announcement: "Announcement bar",
   homeHeadline: "Home headline",
   homeSubheadline: "Home sub-headline",

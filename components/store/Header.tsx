@@ -20,6 +20,9 @@ export function Header({ facebookUrl, announcement }: { facebookUrl: string; ann
             <a href="#faq" className="rounded-lg px-3 py-2 text-[0.95rem] font-medium text-ink-soft hover:bg-pine-50 hover:text-pine-800">
               প্রশ্নোত্তর
             </a>
+            <Link href="/track" className="rounded-lg px-3 py-2 text-[0.95rem] font-medium text-ink-soft hover:bg-pine-50 hover:text-pine-800">
+              অর্ডার ট্র্যাক
+            </Link>
           </nav>
           <div className="flex items-center gap-1 sm:gap-2">
             {facebookUrl && (

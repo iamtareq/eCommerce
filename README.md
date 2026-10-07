@@ -95,8 +95,11 @@ everything from an admin panel at `/admin`.
   - Coupons
   - Reviews (genuine customer reviews only, optional screenshot)
   - Delivery zones and coverage
-  - Site settings: ordering on/off, cash on delivery on/off, contact numbers, announcement, home headline, "Why Deenbox",
-    FAQ, return policy
+  - Site settings: ordering on/off, cash on delivery on/off, gift wrapping price, low-stock alert level, contact
+    numbers, announcement, home headline, "Why Deenbox", FAQ, return policy
+  - Sales report: revenue, orders, average order, items sold, revenue per day, top products, orders by status
+  - Incomplete orders: checkouts with a valid phone number that were not finished, to call (the checkout tells
+    customers this under the phone field). Removed when that number orders, and after 30 days.
   - Users (Owner / Staff roles)
   - My account (change password)
 - **Roles:** Staff can use the dashboard, orders and their own account. Everything else is Owner-only.
@@ -196,7 +199,7 @@ All variables are documented in [`.env.example`](.env.example).
 | `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_TAB`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` | recommended | Google Sheets copy of orders |
 | `STORAGE_DRIVER`, `UPLOAD_DIR`, `CLOUDINARY_*` | no | image storage (`local` by default) |
 | `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_META_PIXEL_ID` | no | analytics; nothing loads when empty |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | no | new-order alerts |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | no | new-order and low-stock alerts |
 | `CRON_SECRET` | no | protects `/api/cron/sheets-sync` |
 | `CLIENT_IP_HEADER`, `TRUSTED_PROXY_HOPS` | no | which proxy header holds the visitor IP for rate limiting (see [Deployment](#deployment)) |
 | `TEST_DATABASE_URL`, `E2E_BASE_URL`, `DATABASE_POOL_SIZE`, `SEED_DELIVERY_*` | no | testing and tuning |
@@ -330,8 +333,8 @@ written as plain values (`RAW`), so phone numbers keep their leading zero and cu
   - The site sends its own page views, and the Meta Pixel's automatic events (button clicks, microdata) are off.
 - **Recommended GA4 setting:** Admin → Data streams → your web stream → Enhanced measurement → ⚙, turn off "Page changes
   based on browser history events". Otherwise GA counts client-side page changes twice.
-- **Telegram:** set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to get a message for every new order. A failed alert never
-  affects the order.
+- **Telegram:** set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to get a message for every new order, and one when an
+  order takes a product to the low-stock level (Admin → Site settings). A failed alert never affects the order.
 
 ## Testing
 

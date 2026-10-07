@@ -6,7 +6,8 @@
  *   quantityDiscount  = per-product "buy N+" tier discounts
  *   couponDiscount    = coupon applied to (subtotal − quantityDiscount)
  *   deliveryCharge    = zone charge, waived by a free-delivery coupon or threshold
- *   total             = subtotal − quantityDiscount − couponDiscount + deliveryCharge
+ *   giftWrapCharge    = gift wrapping, if chosen (never discounted, not counted for free delivery)
+ *   total             = subtotal − quantityDiscount − couponDiscount + deliveryCharge + giftWrapCharge
  */
 
 export type DiscountKind = "PERCENT" | "FIXED";
@@ -44,6 +45,8 @@ export interface PricingInput {
   coupon: CouponRule | null;
   deliveryCharge: number;
   freeDeliveryMinAmount: number | null;
+  /** Gift wrapping the customer chose; 0 or omitted = none. */
+  giftWrapCharge?: number;
 }
 
 export interface PricedLine extends PricedVariant {
@@ -65,6 +68,7 @@ export interface PricingResult {
   /** Zone charge before any waiver. */
   baseDeliveryCharge: number;
   deliveryWaiver: DeliveryWaiver;
+  giftWrapCharge: number;
   total: number;
   coupon: { code: string; applied: boolean; reason: string | null } | null;
   /** Human-readable Bangla notes for applied product tiers. */
@@ -163,6 +167,7 @@ export function calculatePricing(input: PricingInput): PricingResult {
 
   const deliveryCharge = deliveryWaiver ? 0 : Math.max(0, input.deliveryCharge);
   const discount = quantityDiscount + couponDiscount;
+  const giftWrapCharge = Math.max(0, input.giftWrapCharge ?? 0);
 
   return {
     lines,
@@ -174,7 +179,8 @@ export function calculatePricing(input: PricingInput): PricingResult {
     deliveryCharge,
     baseDeliveryCharge: Math.max(0, input.deliveryCharge),
     deliveryWaiver,
-    total: subtotal - discount + deliveryCharge,
+    giftWrapCharge,
+    total: subtotal - discount + deliveryCharge + giftWrapCharge,
     coupon,
     appliedTiers,
   };

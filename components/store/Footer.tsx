@@ -75,6 +75,11 @@ export function Footer({ settings }: { settings: SiteSettings }) {
                 আমার কার্ট
               </Link>
             </li>
+            <li>
+              <Link href="/track" className="hover:text-white">
+                অর্ডার ট্র্যাক করুন
+              </Link>
+            </li>
             {settings.returnPolicy && (
               <li>
                 <Link href="/policy" className="hover:text-white">

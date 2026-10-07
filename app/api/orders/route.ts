@@ -7,7 +7,7 @@ import { authorizeApi } from "@/lib/auth/guard";
 import { CATALOG_TAG } from "@/lib/catalog";
 import { prisma } from "@/lib/db";
 import { syncOrderToSheet } from "@/lib/google-sheets/sync";
-import { notifyNewOrder } from "@/lib/notify";
+import { notifyLowStock, notifyNewOrder } from "@/lib/notify";
 import { listOrders, type OrderFilters } from "@/lib/orders/admin";
 import {
   createOrder,
@@ -110,9 +110,11 @@ export async function POST(request: Request) {
       // Stock was taken: the cached storefront must not keep showing old stock.
       if (result.stockChanged) revalidateTag(CATALOG_TAG, { expire: 0 });
       const orderId = result.order.id;
+      const stockChanged = result.stockChanged;
       after(async () => {
         await syncOrderToSheet(orderId).catch((e) => console.error("[orders] sheet sync error", e));
         await notifyNewOrder(orderId);
+        if (stockChanged) await notifyLowStock(orderId);
       });
     }
 

@@ -15,6 +15,8 @@ export interface SettingsFormValue {
   defaultMaxPerOrder: string;
   duplicateWindowHours: string;
   freeDeliveryMinAmount: string;
+  giftWrapPrice: string;
+  lowStockThreshold: string;
   announcement: string;
   homeHeadline: string;
   homeSubheadline: string;
@@ -43,6 +45,8 @@ function toInput(v: SettingsFormValue): SiteSettingsInput {
     defaultMaxPerOrder: Number(v.defaultMaxPerOrder),
     duplicateWindowHours: Number(v.duplicateWindowHours),
     freeDeliveryMinAmount: v.freeDeliveryMinAmount.trim() === "" ? null : Number(v.freeDeliveryMinAmount),
+    giftWrapPrice: v.giftWrapPrice.trim() === "" ? null : Number(v.giftWrapPrice),
+    lowStockThreshold: Number(v.lowStockThreshold),
     announcement: v.announcement,
     homeHeadline: v.homeHeadline,
     homeSubheadline: v.homeSubheadline,
@@ -250,6 +254,21 @@ export function SettingsForm({ initial }: { initial: SettingsFormValue }) {
               digitsOnly: true,
               placeholder: "Off",
               help: "Product total (after discounts) that gets free delivery. Empty = off.",
+            })}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {text("giftWrapPrice", "Gift wrapping price ৳", {
+              maxLength: 6,
+              inputMode: "numeric",
+              digitsOnly: true,
+              placeholder: "Not offered",
+              help: "Customers can add gift wrapping at checkout for this price. Empty = not offered. A gift message is always free.",
+            })}
+            {text("lowStockThreshold", "Low stock alert at *", {
+              maxLength: 4,
+              inputMode: "numeric",
+              digitsOnly: true,
+              help: "Stock at or below this is listed on the dashboard and sent to Telegram when an order reaches it. 0 = off.",
             })}
           </div>
         </div>

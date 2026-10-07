@@ -79,6 +79,7 @@ export function checkout(overrides: Partial<CheckoutData> = {}): CheckoutData {
     address: "House 12, Road 5, Dhanmondi",
     customerNote: undefined,
     couponCode: undefined,
+    giftWrap: false,
     items: [],
     idempotencyKey: `test-key-${Date.now()}-${keyCounter}-abcdef`,
     ...overrides,

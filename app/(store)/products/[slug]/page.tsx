@@ -8,14 +8,16 @@ import { PurchasePanel } from "@/components/product/PurchasePanel";
 import { Showcase } from "@/components/product/Showcase";
 import { StickyOrderBar } from "@/components/product/StickyOrderBar";
 import { JsonLd } from "@/components/store/JsonLd";
+import { ProductCard, productGridClass } from "@/components/store/ProductCard";
 import { FaqSection, ReviewsSection, WhyChooseSection } from "@/components/store/Sections";
 import { Ornament, SectionHeading } from "@/components/store/SectionHeading";
 import { Icon } from "@/components/ui/Icon";
 import { getSiteUrl } from "@/config/site";
-import { getDeliveryConfig, getProduct, getReviews } from "@/lib/catalog";
+import { getDeliveryConfig, getProduct, getProductCards, getReviews } from "@/lib/catalog";
 import { resolveFaqs } from "@/lib/faq";
 import { formatTakaBn } from "@/lib/money";
 import { toBanglaDigits } from "@/lib/phone";
+import { relatedProducts } from "@/lib/related";
 import { getSettings } from "@/lib/settings";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -62,7 +64,13 @@ export default async function ProductPage({ params }: Props) {
   const product = await getProduct(decodeURIComponent(slug));
   if (!product) notFound();
 
-  const [settings, reviews, delivery] = await Promise.all([getSettings(), getReviews(product.id), getDeliveryConfig()]);
+  const [settings, reviews, delivery, catalog] = await Promise.all([
+    getSettings(),
+    getReviews(product.id),
+    getDeliveryConfig(),
+    getProductCards(),
+  ]);
+  const related = relatedProducts(catalog, { id: product.id, categorySlug: product.category?.slug ?? null });
   const faqs = resolveFaqs([...product.faqs, ...settings.faqs], delivery, settings.freeDeliveryMinAmount);
   const siteUrl = getSiteUrl();
   const prices = product.variants.map((v) => v.price);
@@ -317,9 +325,23 @@ export default async function ProductPage({ params }: Props) {
         </div>
       </section>
 
+      {/* ─── Related ──────────────────────────────────────── */}
+      {related.length > 0 && (
+        <section aria-labelledby="related-title" className="py-14 sm:py-20">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <SectionHeading id="related-title" title="এগুলোও দেখতে পারেন" subtitle="আপনার পছন্দ হতে পারে এমন আরও কিছু পণ্য" />
+            <div className={productGridClass(related.length)}>
+              {related.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <StickyOrderBar />
       {/* Room for the mobile sticky bar so it never covers the footer. */}
-      <div className="h-20 bg-sand md:hidden" aria-hidden="true" />
+      <div className={related.length ? "h-20 md:hidden" : "h-20 bg-sand md:hidden"} aria-hidden="true" />
     </ProductProvider>
   );
 }

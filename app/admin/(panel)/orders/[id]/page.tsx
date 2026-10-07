@@ -92,6 +92,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 </Field>
                 <p className="mt-1 text-xs text-muted">Courier format: {fullAddress}</p>
               </div>
+              {(order.giftWrap || order.giftMessage) && (
+                <div className="sm:col-span-2">
+                  <Field label="Gift">
+                    <span className="block rounded-lg bg-brass-50 px-3 py-2">
+                      {order.giftWrap && <span className="block font-semibold">Gift wrap ({formatTaka(order.giftWrapCharge)})</span>}
+                      {order.giftMessage && <span className="block whitespace-pre-line">Message: {order.giftMessage}</span>}
+                    </span>
+                  </Field>
+                </div>
+              )}
               {order.customerNote && (
                 <div className="sm:col-span-2">
                   <Field label="Customer note">
@@ -157,6 +167,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               <Money label="Quantity discount" value={order.quantityDiscount} negative />
               <Money label={`Coupon${order.couponCode ? ` (${order.couponCode})` : ""}`} value={order.couponDiscount} negative />
               <Money label="Delivery charge" value={order.deliveryCharge} />
+              {order.giftWrapCharge > 0 && <Money label="Gift wrap" value={order.giftWrapCharge} />}
               <Money label="Total" value={order.totalAmount} strong />
             </dl>
           </Card>

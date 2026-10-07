@@ -72,6 +72,8 @@ export const checkoutSchema = z
     areaOther: optionalText(80),
     address: text(300, { multiline: true }).refine((v) => v.length >= 6, { error: MSG.addressShort }),
     customerNote: optionalText(500, { multiline: true }),
+    giftMessage: optionalText(300, { multiline: true }),
+    giftWrap: z.boolean().default(false),
     couponCode: couponCodeSchema,
     items: cartLinesSchema,
     idempotencyKey: z
@@ -93,6 +95,7 @@ export const quoteSchema = z.object({
   districtId: z.string().trim().max(80).optional(),
   areaId: z.string().trim().max(80).optional(),
   couponCode: couponCodeSchema,
+  giftWrap: z.boolean().optional(),
 });
 
 export type QuoteInput = z.input<typeof quoteSchema>;

@@ -152,3 +152,26 @@ describe("allocate", () => {
     expect(parts.reduce((a, b) => a + b, 0)).toBe(157);
   });
 });
+
+describe("gift wrapping", () => {
+  it("is added to the total but never discounted or counted toward free delivery", () => {
+    const r = calculatePricing(
+      base({
+        lines: [{ variant: v("a", "p1", 1000), quantity: 1 }],
+        coupon: { code: "HALF", type: "PERCENT", value: 50, minOrderAmount: null, maxDiscountAmount: null },
+        deliveryCharge: 70,
+        freeDeliveryMinAmount: 600,
+        giftWrapCharge: 100,
+      }),
+    );
+    expect(r.couponDiscount).toBe(500);
+    expect(r.deliveryCharge).toBe(70); // 500 of products is below 600; the wrap does not lift it
+    expect(r.giftWrapCharge).toBe(100);
+    expect(r.total).toBe(1000 - 500 + 70 + 100);
+  });
+
+  it("defaults to none", () => {
+    const r = calculatePricing(base({ lines: [{ variant: v("a", "p1", 300), quantity: 1 }] }));
+    expect([r.giftWrapCharge, r.total]).toEqual([0, 300]);
+  });
+});

@@ -31,8 +31,11 @@ async function prepareSheet(config: SheetsConfig): Promise<void> {
   const key = `${config.spreadsheetId}/${config.tab}`;
   if (preparedSheets.has(key)) return;
   await ensureTab(config);
-  const header = await getValues(config, `A1:${LAST_COLUMN}1`);
-  if (!header[0]?.[0]) {
+  const header = (await getValues(config, `A1:${LAST_COLUMN}1`))[0] ?? [];
+  // Write the header on a new sheet, and add columns added since on an older one. A header
+  // someone edited (any cell differs) is left alone.
+  const outdated = header.length < SHEET_COLUMNS.length && header.every((cell, i) => cell === SHEET_COLUMNS[i]);
+  if (!header[0] || outdated) {
     await updateValues(config, `A1:${LAST_COLUMN}1`, [[...SHEET_COLUMNS]]);
   }
   preparedSheets.add(key);
