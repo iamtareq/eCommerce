@@ -152,6 +152,12 @@ export default async function ProductPage({ params }: Props) {
                 <Icon name="phone" className="mt-0.5 size-5 shrink-0 text-pine-700" />
                 অর্ডারের পর আমাদের প্রতিনিধি ফোন করে কনফার্ম করবেন
               </li>
+              {settings.cashOnDelivery && (
+                <li className="flex items-start gap-2.5">
+                  <Icon name="banknote" className="mt-0.5 size-5 shrink-0 text-pine-700" />
+                  ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা পরিশোধ করুন
+                </li>
+              )}
               {delivery.zones.length > 0 && (
                 <li className="flex items-start gap-2.5">
                   <Icon name="truck" className="mt-0.5 size-5 shrink-0 text-pine-700" />

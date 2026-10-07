@@ -11,6 +11,7 @@ export default async function SettingsPage() {
 
   const initial: SettingsFormValue = {
     acceptingOrders: s.acceptingOrders,
+    cashOnDelivery: s.cashOnDelivery,
     closedMessage: s.closedMessage,
     defaultMaxPerOrder: String(s.defaultMaxPerOrder),
     duplicateWindowHours: String(s.duplicateWindowHours),

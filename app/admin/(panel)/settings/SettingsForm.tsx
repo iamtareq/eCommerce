@@ -10,6 +10,7 @@ import { Toggle } from "./Toggle";
 
 export interface SettingsFormValue {
   acceptingOrders: boolean;
+  cashOnDelivery: boolean;
   closedMessage: string;
   defaultMaxPerOrder: string;
   duplicateWindowHours: string;
@@ -37,6 +38,7 @@ const isBlankRow = (row: Record<string, string>) => Object.values(row).every((x)
 function toInput(v: SettingsFormValue): SiteSettingsInput {
   return {
     acceptingOrders: v.acceptingOrders,
+    cashOnDelivery: v.cashOnDelivery,
     closedMessage: v.closedMessage,
     defaultMaxPerOrder: Number(v.defaultMaxPerOrder),
     duplicateWindowHours: Number(v.duplicateWindowHours),
@@ -212,6 +214,15 @@ export function SettingsForm({ initial }: { initial: SettingsFormValue }) {
               onChange={(on) => set("acceptingOrders", on)}
               label={v.acceptingOrders ? "Accepting orders" : "Orders are paused"}
               description="Turn off to pause new orders (e.g. during Eid holidays). Product pages stay visible."
+            />
+          </div>
+          <div className="rounded-lg border border-line bg-paper/60 p-3">
+            <Toggle
+              id="s-cashOnDelivery"
+              checked={v.cashOnDelivery}
+              onChange={(on) => set("cashOnDelivery", on)}
+              label="Cash on delivery"
+              description="Turn on only if customers pay when the parcel arrives. The store then shows “ক্যাশ অন ডেলিভারি” on the home page and product pages."
             />
           </div>
           {text("closedMessage", "Message while orders are paused (Bangla)", {

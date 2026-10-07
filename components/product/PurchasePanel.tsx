@@ -59,6 +59,9 @@ export function PurchasePanel() {
       <div className="flex flex-wrap items-center gap-3">
         <Price price={variant.price} compareAtPrice={variant.compareAtPrice} size="lg" />
         <DiscountBadge price={variant.price} compareAtPrice={variant.compareAtPrice} />
+        {variant.compareAtPrice != null && variant.compareAtPrice > variant.price && (
+          <span className="text-[0.95rem] font-semibold text-success-700">{formatTakaBn(variant.compareAtPrice - variant.price)} সাশ্রয়</span>
+        )}
       </div>
 
       {product.tiers.length > 0 && (

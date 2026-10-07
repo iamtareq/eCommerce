@@ -10,6 +10,7 @@ export type SiteSettingsInput = z.input<typeof siteSettingsSchema>;
 
 const LABELS: Record<string, string> = {
   acceptingOrders: "Accepting orders",
+  cashOnDelivery: "Cash on delivery",
   closedMessage: "Message while orders are paused",
   defaultMaxPerOrder: "Default max quantity per product",
   duplicateWindowHours: "Repeat-order check window",
