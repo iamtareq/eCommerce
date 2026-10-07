@@ -95,8 +95,8 @@ everything from an admin panel at `/admin`.
   - Coupons
   - Reviews (genuine customer reviews only, optional screenshot)
   - Delivery zones and coverage
-  - Site settings: ordering on/off, cash on delivery on/off, contact numbers, announcement, home headline, "Why Deenbox",
-    FAQ, return policy
+  - Site settings: ordering on/off, cash on delivery on/off, gift wrapping price, contact numbers, announcement, home
+    headline, "Why Deenbox", FAQ, return policy
   - Users (Owner / Staff roles)
   - My account (change password)
 - **Roles:** Staff can use the dashboard, orders and their own account. Everything else is Owner-only.

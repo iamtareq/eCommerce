@@ -22,6 +22,8 @@ export const SHEET_COLUMNS = [
   "Total Amount",
   "Order Status",
   "Customer Note",
+  // Added later: new columns go at the end so existing sheets keep their layout.
+  "Gift",
 ] as const;
 
 export const LAST_COLUMN = String.fromCharCode("A".charCodeAt(0) + SHEET_COLUMNS.length - 1);
@@ -41,6 +43,9 @@ export interface SheetOrder {
   totalAmount: number;
   orderStatus: OrderStatus;
   customerNote: string | null;
+  giftWrap: boolean;
+  giftWrapCharge: number;
+  giftMessage: string | null;
   items: { productName: string; variantName: string | null; quantity: number; unitPrice: number }[];
 }
 
@@ -71,5 +76,13 @@ export function orderToRow(order: SheetOrder): CellValue[] {
     order.totalAmount,
     orderStatusLabel(order.orderStatus),
     order.customerNote ?? "",
+    giftCell(order),
   ];
+}
+
+/** "Gift wrap (৳50)" and/or the gift message, one per line; empty when the order is not a gift. */
+export function giftCell(order: Pick<SheetOrder, "giftWrap" | "giftWrapCharge" | "giftMessage">): string {
+  return [order.giftWrap ? `Gift wrap (৳${order.giftWrapCharge})` : "", order.giftMessage ? `Message: ${order.giftMessage}` : ""]
+    .filter(Boolean)
+    .join("\n");
 }

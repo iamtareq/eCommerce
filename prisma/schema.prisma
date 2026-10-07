@@ -251,6 +251,11 @@ model Order {
   areaId           String?
   address          String
   customerNote     String?
+  /// Message the customer wants with the gift (written on a card), if any.
+  giftMessage      String?
+  giftWrap         Boolean     @default(false)
+  /// What gift wrapping cost on this order (0 when not chosen); part of totalAmount.
+  giftWrapCharge   Int         @default(0)
   itemCount        Int
   subtotal         Int
   quantityDiscount Int         @default(0)

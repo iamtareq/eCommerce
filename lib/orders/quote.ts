@@ -30,6 +30,10 @@ export interface Quote {
   deliveryCharge: number;
   baseDeliveryCharge: number;
   deliveryWaiver: DeliveryWaiver;
+  /** What gift wrapping adds to this quote (0 unless chosen and offered). */
+  giftWrapCharge: number;
+  /** Gift wrapping's price, or null when the store does not offer it. */
+  giftWrapPrice: number | null;
   zone: { name: string; estimatedDelivery: string | null } | null;
   total: number;
   coupon: { code: string; applied: boolean; message: string | null } | null;
@@ -43,6 +47,7 @@ export interface QuoteInput {
   districtId?: string;
   areaId?: string;
   couponCode?: string;
+  giftWrap?: boolean;
 }
 
 /**
@@ -82,6 +87,7 @@ export async function buildQuoteChecked(input: QuoteInput): Promise<{ quote: Quo
     coupon: couponLookup?.ok ? couponLookup.rule : null,
     deliveryCharge: zone?.charge ?? 0,
     freeDeliveryMinAmount: settings.freeDeliveryMinAmount,
+    giftWrapCharge: input.giftWrap ? (settings.giftWrapPrice ?? 0) : 0,
   });
 
   const cartByVariant = new Map(cart.lines.map((l) => [l.variant.variantId, l]));
@@ -121,6 +127,8 @@ export async function buildQuoteChecked(input: QuoteInput): Promise<{ quote: Quo
     deliveryCharge: zone ? pricing.deliveryCharge : 0,
     baseDeliveryCharge: zone ? pricing.baseDeliveryCharge : 0,
     deliveryWaiver: zone ? pricing.deliveryWaiver : null,
+    giftWrapCharge: pricing.giftWrapCharge,
+    giftWrapPrice: settings.giftWrapPrice,
     zone: zone ? { name: zone.name, estimatedDelivery: zone.estimatedDelivery } : null,
     total: pricing.total,
     coupon,

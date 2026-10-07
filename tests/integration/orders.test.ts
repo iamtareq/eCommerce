@@ -209,6 +209,26 @@ describe("createOrder", () => {
     expect(o.deliveryCharge).toBe(0);
     expect(o.totalAmount).toBe(3000 - 300);
   });
+  it("adds gift wrapping at the configured price, and only when the store offers it", async () => {
+    // Not offered: asking for it adds nothing, but the gift message is kept.
+    const off = await createOrder(checkout({ giftWrap: true, giftMessage: "ঈদ মোবারক!", items: [{ variantId: f.box, quantity: 1 }] }));
+    if (!off.ok) throw new Error(JSON.stringify(off));
+    const o1 = await prisma.order.findUniqueOrThrow({ where: { id: off.order.id } });
+    expect([o1.giftWrap, o1.giftWrapCharge, o1.giftMessage, o1.totalAmount]).toEqual([false, 0, "ঈদ মোবারক!", 800 + 70]);
+
+    await saveSettings(siteSettingsSchema.parse({ giftWrapPrice: 50, freeDeliveryMinAmount: 800 }));
+    const quote = await buildQuote({ items: [{ variantId: f.box, quantity: 1 }], districtId: "dhaka", areaId: "dhaka-city-dhanmondi", giftWrap: true });
+    expect([quote.giftWrapCharge, quote.giftWrapPrice, quote.total]).toEqual([50, 50, 800 + 50]);
+
+    // The customer confirmed the quote's total; the order matches it. Wrapping is not discounted
+    // and does not count toward free delivery (800 of products reaches the 800 threshold on its own).
+    const on = await createOrder(checkout({ mobileNumber: "01811111111", giftWrap: true, items: [{ variantId: f.box, quantity: 1 }] }), {
+      expectedTotal: quote.total,
+    });
+    if (!on.ok) throw new Error(JSON.stringify(on));
+    const o2 = await prisma.order.findUniqueOrThrow({ where: { id: on.order.id } });
+    expect([o2.giftWrap, o2.giftWrapCharge, o2.deliveryCharge, o2.totalAmount]).toEqual([true, 50, 0, 850]);
+  });
 });
 
 describe("buildQuote", () => {

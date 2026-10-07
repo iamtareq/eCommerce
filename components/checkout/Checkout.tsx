@@ -79,6 +79,8 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   const [location, setLocation] = useState<LocationValue>({ divisionId: "", districtId: "", areaId: "", areaOther: "" });
   const [address, setAddress] = useState("");
   const [customerNote, setCustomerNote] = useState("");
+  const [giftMessage, setGiftMessage] = useState("");
+  const [giftWrap, setGiftWrap] = useState(false);
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
@@ -128,12 +130,13 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   );
 
   const items = useMemo(() => lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), [lines]);
-  const inputKey = JSON.stringify([items, location.districtId, location.areaId, appliedCoupon]);
+  const inputKey = JSON.stringify([items, location.districtId, location.areaId, appliedCoupon, giftWrap]);
   const quoteInput: QuoteInput = {
     items,
     districtId: location.districtId || undefined,
     areaId: location.areaId || undefined,
     couponCode: appliedCoupon || undefined,
+    giftWrap,
   };
 
   // ─── Live quote from the server (debounced; stale responses discarded).
@@ -181,11 +184,13 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
       areaOther: location.areaOther || undefined,
       address,
       customerNote: customerNote || undefined,
+      giftMessage: giftMessage || undefined,
+      giftWrap,
       couponCode: appliedCoupon || undefined,
       items,
       idempotencyKey: idempotencyKey.current || "x".repeat(16),
     }),
-    [customerName, mobileNumber, location, address, customerNote, appliedCoupon, items],
+    [customerName, mobileNumber, location, address, customerNote, giftMessage, giftWrap, appliedCoupon, items],
   );
 
   // After the first submit attempt, re-validate as the customer types.
@@ -541,9 +546,47 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
               onChange={(e) => setCustomerNote(e.target.value)}
               maxLength={500}
               rows={2}
-              placeholder="যেমন: গিফট র‍্যাপিং চাই / বিকেলে ফোন করবেন"
+              placeholder="যেমন: বিকেলে ফোন করবেন"
             />
           </div>
+          <fieldset className="mt-4 rounded-xl border border-brass-300/70 bg-brass-50/60 p-4">
+            <legend className="sr-only">উপহার</legend>
+            <p className="flex items-center gap-2 font-semibold text-ink">
+              <Icon name="gift" className="size-5 text-brass-700" />
+              উপহার হিসেবে পাঠাচ্ছেন? <span className="font-normal text-muted">(ঐচ্ছিক)</span>
+            </p>
+            {quote?.giftWrapPrice != null && (
+              <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3">
+                <input
+                  type="checkbox"
+                  name="giftWrap"
+                  checked={giftWrap}
+                  onChange={(e) => setGiftWrap(e.target.checked)}
+                  className="mt-1 size-5 shrink-0 accent-pine-700"
+                />
+                <span>
+                  <span className="block font-semibold text-ink">
+                    গিফট র‍্যাপ করে দিন <span className="font-bold text-pine-800">+{formatTakaBn(quote.giftWrapPrice)}</span>
+                  </span>
+                  <span className="block text-sm text-muted">উপহারের মতো সুন্দর করে মুড়িয়ে পাঠানো হবে</span>
+                </span>
+              </label>
+            )}
+            <label htmlFor="giftMessage" className={cn(field.label, "mt-3")}>
+              উপহার বার্তা
+            </label>
+            <textarea
+              id="giftMessage"
+              name="giftMessage"
+              className={cn(field.textarea, "min-h-20")}
+              value={giftMessage}
+              onChange={(e) => setGiftMessage(e.target.value)}
+              maxLength={300}
+              rows={2}
+              placeholder="যেমন: প্রিয় আম্মু, ঈদ মোবারক! — তোমার রাফি"
+            />
+            <p className={field.hint}>যিনি উপহার পাবেন, তাঁর জন্য আপনার শুভেচ্ছা বার্তা</p>
+          </fieldset>
         </Card>
       </div>
 

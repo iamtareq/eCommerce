@@ -127,6 +127,8 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
       coupon: couponRule,
       deliveryCharge: zone.charge,
       freeDeliveryMinAmount: settings.freeDeliveryMinAmount,
+      // Wrapping asked for while the store does not offer it adds nothing (the quote showed no such option).
+      giftWrapCharge: data.giftWrap ? (settings.giftWrapPrice ?? 0) : 0,
     });
     if (pricing.coupon && !pricing.coupon.applied) {
       const message = couponReasonMessage(pricing.coupon.reason) ?? MSG.cartChanged;
@@ -232,6 +234,9 @@ async function placeOrder(data: CheckoutData, meta: OrderMeta): Promise<CreateOr
             areaId: location.area?.id ?? null,
             address: data.address,
             customerNote: data.customerNote ?? null,
+            giftMessage: data.giftMessage ?? null,
+            giftWrap: pricing.giftWrapCharge > 0,
+            giftWrapCharge: pricing.giftWrapCharge,
             itemCount: pricing.itemCount,
             subtotal: pricing.subtotal,
             quantityDiscount: pricing.quantityDiscount,

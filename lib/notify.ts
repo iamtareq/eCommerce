@@ -19,6 +19,8 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
       `${order.customerName} · ${order.mobileNumber}`,
       `${order.area}, ${order.district}`,
       ...order.items.map((i) => `• ${itemLabel(i.productName, i.variantName)} × ${i.quantity}`),
+      order.giftWrap ? `🎁 Gift wrap (${formatTaka(order.giftWrapCharge)})` : "",
+      order.giftMessage ? `💌 ${order.giftMessage}` : "",
       `Total: ${formatTaka(order.totalAmount)}`,
       order.isFlagged ? `⚠️ ${order.flagReason}` : "",
       `${getSiteUrl()}/admin/orders/${order.id}`,

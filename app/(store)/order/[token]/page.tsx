@@ -194,11 +194,22 @@ export default async function OrderSuccessPage({
                 {order.discount > 0 ? `− ${formatTakaBn(order.discount)}` : formatTakaBn(0)}
               </dd>
             </div>
+            {order.giftWrapCharge > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-ink-soft">গিফট র‍্যাপ</dt>
+                <dd className="tabular-nums">{formatTakaBn(order.giftWrapCharge)}</dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-line pt-3 text-lg font-bold">
               <dt>সর্বমোট</dt>
               <dd className="tabular-nums text-pine-800">{formatTakaBn(order.totalAmount)}</dd>
             </div>
           </dl>
+          {order.giftMessage && (
+            <p className="mt-4 rounded-xl bg-brass-50 p-3 text-sm whitespace-pre-line text-ink-soft">
+              <span className="font-semibold">উপহার বার্তা:</span> {order.giftMessage}
+            </p>
+          )}
           {order.customerNote && (
             <p className="mt-4 rounded-xl bg-paper p-3 text-sm text-ink-soft">
               <span className="font-semibold">আপনার নির্দেশনা:</span> {order.customerNote}
