@@ -5,6 +5,7 @@ import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
 import { findOrderTokenForTracking } from "@/lib/orders/public";
+import { salesReport } from "@/lib/reports";
 import { saveSettings, siteSettingsSchema } from "@/lib/settings";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { checkout, resetDb, seedFixture, type Fixture } from "./helpers";
@@ -417,5 +418,32 @@ describe("order tracking", () => {
     // Past the 60-day link window, like the link itself.
     await prisma.order.update({ where: { id: r.order.id }, data: { createdAt: new Date(Date.now() - 61 * 24 * 60 * 60 * 1000) } });
     expect(await findOrderTokenForTracking(n, "01911223344")).toBeNull();
+  });
+});
+
+describe("sales report", () => {
+  it("sums live orders per Dhaka day and leaves cancelled ones out of revenue", async () => {
+    const a = await createOrder(checkout({ items: [{ variantId: f.frameSmall, quantity: 2 }] })); // 2000 − 200 + 70
+    const b = await createOrder(checkout({ mobileNumber: "01811111111", items: [{ variantId: f.box, quantity: 1 }] })); // 800 + 70
+    const c = await createOrder(checkout({ mobileNumber: "01822222222", items: [{ variantId: f.box, quantity: 3 }] }));
+    if (!a.ok || !b.ok || !c.ok) throw new Error("orders failed");
+    await updateOrderStatus(c.order.id, "CANCELLED", actor);
+    // 23:30 Dhaka time on the 1st is still the 1st, though it is already 17:30 UTC.
+    await prisma.order.update({ where: { id: b.order.id }, data: { createdAt: new Date("2026-09-01T17:30:00Z") } });
+    await prisma.order.update({ where: { id: a.order.id }, data: { createdAt: new Date("2026-09-02T04:00:00Z") } });
+    await prisma.order.update({ where: { id: c.order.id }, data: { createdAt: new Date("2026-09-02T05:00:00Z") } });
+
+    const r = await salesReport({ from: "2026-09-01", to: "2026-09-03", preset: null });
+    expect(r.days).toEqual([
+      { date: "2026-09-01", orders: 1, revenue: 870 },
+      { date: "2026-09-02", orders: 1, revenue: 1870 },
+      { date: "2026-09-03", orders: 0, revenue: 0 },
+    ]);
+    expect([r.orders, r.revenue, r.averageOrder, r.itemsSold, r.cancelled]).toEqual([2, 2740, 1370, 3, 1]);
+    expect(r.topProducts).toEqual([
+      { name: "Wall Frame (Small)", quantity: 2, revenue: 1800 },
+      { name: "Gift Box", quantity: 1, revenue: 800 },
+    ]);
+    expect(r.byStatus.find((s) => s.status === "CANCELLED")?.count).toBe(1);
   });
 });
