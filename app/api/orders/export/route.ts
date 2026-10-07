@@ -31,11 +31,12 @@ const HEADER = [
   "Total Amount",
   "Order Status",
   "Customer Note",
-  "Gift Wrap Charge",
-  "Gift Message",
   "Admin Note",
   "Flagged",
   "Sheet Sync",
+  // Added later: new columns go at the end so imports by column position keep working.
+  "Gift Wrap Charge",
+  "Gift Message",
 ];
 
 /** GET /api/orders/export?… — CSV of orders matching the current filters (admin). */
@@ -84,11 +85,11 @@ export async function GET(request: Request) {
     o.totalAmount,
     orderStatusLabel(o.orderStatus),
     o.customerNote ?? "",
-    o.giftWrapCharge,
-    o.giftMessage ?? "",
     o.adminNote ?? "",
     o.isFlagged ? o.flagReason ?? "yes" : "",
     o.googleSheetSyncStatus,
+    o.giftWrapCharge,
+    o.giftMessage ?? "",
   ]);
 
   return new NextResponse(toCsv(HEADER, rows), {

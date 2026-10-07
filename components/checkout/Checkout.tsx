@@ -209,7 +209,15 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
     const timer = setTimeout(() => {
       if (submittingRef.current) return;
       leadSent.current = body;
-      fetch("/api/checkout/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+      // A failed save (network, rate limit) is forgotten, so the next change tries again.
+      const forget = () => {
+        if (leadSent.current === body) leadSent.current = "";
+      };
+      fetch("/api/checkout/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true })
+        .then((res) => {
+          if (!res.ok) forget();
+        })
+        .catch(forget);
     }, 2500);
     return () => clearTimeout(timer);
   }, [mobileNumber, customerName, location.districtId, items]);

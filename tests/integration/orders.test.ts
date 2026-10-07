@@ -4,7 +4,7 @@ import { dhakaDateKey } from "@/lib/dates";
 import { createOrder } from "@/lib/orders/create";
 import { buildQuote } from "@/lib/orders/quote";
 import { OrderUpdateError, updateOrderStatus, listOrders } from "@/lib/orders/admin";
-import { findOrderTokenForTracking } from "@/lib/orders/public";
+import { findOrderForTracking } from "@/lib/orders/public";
 import { countOpenLeads, leadSchema, listLeads, saveLead } from "@/lib/leads";
 import { salesReport } from "@/lib/reports";
 import { lowStockVariants, stockCrossedBy } from "@/lib/stock";
@@ -408,18 +408,25 @@ describe("order tracking", () => {
     if (!r.ok) throw new Error(JSON.stringify(r));
     const n = r.order.orderNumber;
 
-    expect(await findOrderTokenForTracking(n, "01911223344")).toBe(r.order.publicToken);
+    const found = await findOrderForTracking(n, "01911223344");
+    expect(found).toMatchObject({ orderNumber: n, status: "PENDING", totalAmount: 870, items: [{ label: "Gift Box", quantity: 1, total: 800 }] });
+    // Nothing that identifies the customer or opens the private order page.
+    expect(Object.keys(found!).sort()).toEqual(
+      ["deliveryCharge", "discount", "giftWrapCharge", "items", "orderNumber", "placedAt", "status", "totalAmount"].sort(),
+    );
+    expect(JSON.stringify(found)).not.toContain(r.order.publicToken);
+
     // Typed loosely: lower case, spaces, Bangla digits, +880 prefix.
     const bn = (s: string) => s.replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]!);
-    expect(await findOrderTokenForTracking(` ${bn(n.toLowerCase())} `, "+880 1911-223344")).toBe(r.order.publicToken);
+    expect((await findOrderForTracking(` ${bn(n.toLowerCase())} `, "+880 1911-223344"))?.orderNumber).toBe(n);
 
-    expect(await findOrderTokenForTracking(n, "01700000000")).toBeNull();
-    expect(await findOrderTokenForTracking("DBX-19990101-0001", "01911223344")).toBeNull();
-    expect(await findOrderTokenForTracking(n, "not a phone")).toBeNull();
+    expect(await findOrderForTracking(n, "01700000000")).toBeNull();
+    expect(await findOrderForTracking("DBX-19990101-0001", "01911223344")).toBeNull();
+    expect(await findOrderForTracking(n, "not a phone")).toBeNull();
 
     // Past the 60-day link window, like the link itself.
     await prisma.order.update({ where: { id: r.order.id }, data: { createdAt: new Date(Date.now() - 61 * 24 * 60 * 60 * 1000) } });
-    expect(await findOrderTokenForTracking(n, "01911223344")).toBeNull();
+    expect(await findOrderForTracking(n, "01911223344")).toBeNull();
   });
 });
 
@@ -479,6 +486,29 @@ describe("low stock", () => {
 describe("incomplete orders", () => {
   const lead = (over: Record<string, unknown> = {}) =>
     leadSchema.parse({ customerName: "Rahim", mobileNumber: "০১৯১১-২২৩৩৪৪", districtId: "dhaka", items: [{ variantId: f.box, quantity: 2 }], ...over });
+
+  it("opens a contacted entry again when the cart changes", async () => {
+    await saveLead(lead(), "ip1");
+    await prisma.checkoutLead.updateMany({ data: { contactedAt: new Date(), contactedBy: "Staff" } });
+    await saveLead(lead({ customerName: "Rahim Uddin" }), "ip1"); // same cart, minutes later: still contacted
+    expect(await countOpenLeads()).toBe(0);
+    await saveLead(lead({ items: [{ variantId: f.box, quantity: 3 }] }), "ip1"); // new cart: call again
+    expect(await countOpenLeads()).toBe(1);
+    expect((await listLeads())[0]).toMatchObject({ contactedAt: null, contactedBy: null });
+  });
+
+  it("does not let another visitor change a fresh entry, or one IP add endless numbers", async () => {
+    await saveLead(lead(), "ip1");
+    expect(await saveLead(lead({ customerName: "spam" }), "ip2")).toBe(false);
+    expect((await listLeads())[0]!.customerName).toBe("Rahim");
+    // A day later the customer may be back on another network.
+    await prisma.checkoutLead.updateMany({ data: { updatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000) } });
+    expect(await saveLead(lead({ customerName: "Rahim again" }), "ip2")).toBe(true);
+    expect((await listLeads())[0]!.customerName).toBe("Rahim again");
+
+    for (let n = 0; n < 20; n++) expect(await saveLead(lead({ mobileNumber: `0171000${String(n).padStart(4, "0")}` }), "ip3")).toBe(true);
+    expect(await saveLead(lead({ mobileNumber: "01710009999" }), "ip3")).toBe(false);
+  });
 
   it("keeps one entry per phone, priced from the database", async () => {
     expect(await saveLead(lead(), "ip1")).toBe(true);

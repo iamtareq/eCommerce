@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { itemLabel } from "@/config/order";
-import { prisma } from "@/lib/db";
+import { isUniqueViolation, prisma } from "@/lib/db";
 import { getLocationData } from "@/lib/locations.server";
 import { loadCart } from "@/lib/orders/cart";
+import { rateLimit } from "@/lib/rate-limit";
 import { getSettingsFresh } from "@/lib/settings";
 import { cartLinesSchema, phoneSchema } from "@/lib/validation/checkout";
 
@@ -19,33 +20,73 @@ export const leadSchema = z.object({
 
 export type LeadItem = { name: string; quantity: number };
 
+/** New phone numbers one IP may add per day: room for a shared mobile-network IP, not for filling the call list. */
+const NEW_LEADS_PER_IP_PER_DAY = 20;
+const HOUR_MS = 60 * 60 * 1000;
+/** Orders this recent mean the phone finished its checkout. */
+const RECENT_ORDER_MS = 10 * 60 * 1000;
+
+function orderedRecently(mobileNumber: string) {
+  return prisma.order.findFirst({
+    where: { mobileNumber, createdAt: { gte: new Date(Date.now() - RECENT_ORDER_MS) } },
+    select: { id: true },
+  });
+}
+
 /**
  * Saves (or refreshes) the unfinished checkout of a phone number. Product names and
- * prices come from the database, never from the browser. Returns false when there is
- * nothing worth saving (no product left in the cart) or the phone already ordered
- * since it was last saved.
+ * prices come from the database, never from the browser. Returns false when nothing
+ * was saved: no product left in the cart, the phone already ordered, the entry belongs
+ * to another visitor, or this IP added too many new numbers today.
  */
 export async function saveLead(input: z.output<typeof leadSchema>, ipHash: string | null): Promise<boolean> {
   const settings = await getSettingsFresh();
   const cart = await loadCart(input.items, settings.defaultMaxPerOrder);
   if (cart.lines.length === 0) return false;
-
   // A phone that just ordered is not an unfinished checkout (e.g. a late save after submitting).
-  const recentOrder = await prisma.order.findFirst({
-    where: { mobileNumber: input.mobileNumber, createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) } },
-    select: { id: true },
-  });
-  if (recentOrder) return false;
+  if (await orderedRecently(input.mobileNumber)) return false;
 
   const items: LeadItem[] = cart.lines.map((l) => ({ name: itemLabel(l.variant.productName, l.variant.variantName), quantity: l.quantity }));
   const subtotal = cart.lines.reduce((s, l) => s + l.variant.price * l.quantity, 0);
   const district = input.districtId ? (getLocationData().districts.find((d) => d.id === input.districtId)?.bn ?? null) : null;
   const data = { customerName: input.customerName, district, items, subtotal, ipHash };
-  await prisma.checkoutLead.upsert({
-    where: { mobileNumber: input.mobileNumber },
-    create: { mobileNumber: input.mobileNumber, ...data },
-    update: data,
-  });
+
+  const existing = await prisma.checkoutLead.findUnique({ where: { mobileNumber: input.mobileNumber } });
+  if (existing) {
+    const stale = Date.now() - existing.updatedAt.getTime() > 24 * HOUR_MS;
+    // Anyone can type any number: only the visitor who saved an entry may change it, unless it
+    // is a day old (mobile IPs change, and the customer may come back from another network).
+    if (existing.ipHash && existing.ipHash !== ipHash && !stale) return false;
+    // A different cart, or a return after an hour, is new activity: open it again for a call.
+    const cartKey = (list: LeadItem[]) => list.map((i) => `${i.name}×${i.quantity}`).join("|");
+    const before = Array.isArray(existing.items) ? (existing.items as LeadItem[]) : [];
+    const reopen = cartKey(before) !== cartKey(items) || Date.now() - existing.updatedAt.getTime() > HOUR_MS;
+    // updateMany: an order's clearLead may have removed it meanwhile, which is fine.
+    await prisma.checkoutLead.updateMany({
+      where: { id: existing.id },
+      data: { ...data, ...(reopen ? { contactedAt: null, contactedBy: null } : {}) },
+    });
+  } else {
+    if (ipHash) {
+      const limit = await rateLimit(`lead:new:ip:${ipHash}`, NEW_LEADS_PER_IP_PER_DAY, 24 * HOUR_MS);
+      if (!limit.ok) return false;
+    }
+    try {
+      await prisma.checkoutLead.create({ data: { mobileNumber: input.mobileNumber, ...data } });
+    } catch (error) {
+      // Another save for this number created it first; that one stands.
+      if (isUniqueViolation(error)) return false;
+      throw error;
+    }
+  }
+
+  // The order may have been placed while this save ran (its clearLead found nothing to
+  // delete yet). Checking again after writing closes that gap: either the order's clearLead
+  // runs after this write, or the order is already visible here.
+  if (await orderedRecently(input.mobileNumber)) {
+    await clearLead(input.mobileNumber);
+    return false;
+  }
   return true;
 }
 

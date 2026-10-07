@@ -33,8 +33,7 @@ function freeDeliveryWarning(zones: { name: string; charge: number; isDefault: b
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const admin = await requireAdmin();
   const { denied } = await searchParams;
-  const { lowStockThreshold } = await getSettingsFresh();
-  const [stats, recent, productCount, zones, lowStock, openLeads] = await Promise.all([
+  const [stats, recent, productCount, zones, { lowStockThreshold, lowStock }, openLeads] = await Promise.all([
     dashboardStats(),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -47,7 +46,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       orderBy: [{ sortOrder: "asc" }, { charge: "asc" }],
       select: { name: true, charge: true, isDefault: true },
     }),
-    lowStockVariants(lowStockThreshold),
+    getSettingsFresh().then(async (s) => ({ lowStockThreshold: s.lowStockThreshold, lowStock: await lowStockVariants(s.lowStockThreshold) })),
     countOpenLeads(),
   ]);
   const zoneCount = zones.length;
