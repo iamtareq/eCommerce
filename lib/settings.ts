@@ -62,6 +62,8 @@ export const siteSettingsSchema = z.object({
   businessAddress: z.string().trim().max(300).default(""),
   returnPolicy: z.string().trim().max(3000).default(""),
 
+  /** Customers pay on delivery. Off until the owner confirms it: the store then says so (trust strip, product page, how to order). */
+  cashOnDelivery: z.boolean().default(false),
   /** Orders whose product total (after discounts) reaches this amount get free delivery. Null = off. */
   freeDeliveryMinAmount: z.number().int().min(1).max(10_000_000).nullable().default(null),
   /** Max total quantity per product per order when the product has no own limit. */

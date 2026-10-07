@@ -95,7 +95,8 @@ everything from an admin panel at `/admin`.
   - Coupons
   - Reviews (genuine customer reviews only, optional screenshot)
   - Delivery zones and coverage
-  - Site settings: ordering on/off, contact numbers, announcement, home headline, "Why Deenbox", FAQ, return policy
+  - Site settings: ordering on/off, cash on delivery on/off, contact numbers, announcement, home headline, "Why Deenbox",
+    FAQ, return policy
   - Users (Owner / Staff roles)
   - My account (change password)
 - **Roles:** Staff can use the dashboard, orders and their own account. Everything else is Owner-only.
@@ -449,6 +450,8 @@ Business information still needed (enter it in the admin panel):
 - [ ] Real products: names, photos, descriptions, variants and prices (Admin → Products). Then `npm run db:demo:remove`.
 - [ ] Delivery charges for inside and outside Dhaka city, plus delivery times (Admin → Delivery).
 - [ ] Contact phone, WhatsApp number, Messenger link, business address (Admin → Site settings).
+- [ ] Cash on delivery: if customers pay on arrival, turn it on (Admin → Site settings). The home page and product pages
+      then say so; while it is off they never mention it.
 - [ ] FAQ answers: Cash on Delivery, return/exchange, delivery areas. Unanswered questions stay hidden. Also add the return
       policy text.
 - [ ] Genuine customer reviews, if any (Admin → Reviews).
