@@ -7,8 +7,7 @@ import { getSheetsConfig } from "@/lib/google-sheets/config";
 import { countOpenLeads } from "@/lib/leads";
 import { formatTaka } from "@/lib/money";
 import { dashboardStats } from "@/lib/orders/admin";
-import { getSettingsFresh } from "@/lib/settings";
-import { lowStockVariants } from "@/lib/stock";
+import { lowStockSummary } from "@/lib/stock";
 
 export const metadata = { title: "Dashboard" };
 
@@ -33,7 +32,7 @@ function freeDeliveryWarning(zones: { name: string; charge: number; isDefault: b
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const admin = await requireAdmin();
   const { denied } = await searchParams;
-  const [stats, recent, productCount, zones, { lowStockThreshold, lowStock }, openLeads] = await Promise.all([
+  const [stats, recent, productCount, zones, lowStock, openLeads] = await Promise.all([
     dashboardStats(),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -46,7 +45,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       orderBy: [{ sortOrder: "asc" }, { charge: "asc" }],
       select: { name: true, charge: true, isDefault: true },
     }),
-    getSettingsFresh().then(async (s) => ({ lowStockThreshold: s.lowStockThreshold, lowStock: await lowStockVariants(s.lowStockThreshold) })),
+    lowStockSummary(),
     countOpenLeads(),
   ]);
   const zoneCount = zones.length;
@@ -131,10 +130,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         Today = since midnight Bangladesh time. Revenue excludes cancelled orders. On hold: {stats.onHold} · Processing: {stats.processing}
       </p>
 
-      {lowStock.length > 0 && (
-        <Card title={`Low stock (${lowStockThreshold} or fewer)`} className="mt-6" padded={false}>
+      {lowStock.variants.length > 0 && (
+        <Card title={`Low stock (${lowStock.threshold} or fewer)`} className="mt-6" padded={false}>
           <ul className="divide-y divide-line">
-            {lowStock.map((v) => {
+            {lowStock.variants.map((v) => {
               const label = (
                 <>
                   <span className="min-w-0 font-medium text-ink">{v.label}</span>

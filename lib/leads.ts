@@ -20,11 +20,22 @@ export const leadSchema = z.object({
 
 export type LeadItem = { name: string; quantity: number };
 
-/** New phone numbers one IP may add per day: room for a shared mobile-network IP, not for filling the call list. */
-const NEW_LEADS_PER_IP_PER_DAY = 20;
+/**
+ * Numbers one IP may add, or take over from another IP, per day: room for a shared
+ * mobile-network IP and for customers whose IP changes, not for filling or rewriting the call list.
+ */
+const NUMBERS_PER_IP_PER_DAY = 20;
 const HOUR_MS = 60 * 60 * 1000;
 /** Orders this recent mean the phone finished its checkout. */
 const RECENT_ORDER_MS = 10 * 60 * 1000;
+
+/** The same products and quantities in any order give the same key. */
+function cartKey(items: LeadItem[]): string {
+  return items
+    .map((i) => `${i.name}×${i.quantity}`)
+    .sort()
+    .join("|");
+}
 
 function orderedRecently(mobileNumber: string) {
   return prisma.order.findFirst({
@@ -36,8 +47,13 @@ function orderedRecently(mobileNumber: string) {
 /**
  * Saves (or refreshes) the unfinished checkout of a phone number. Product names and
  * prices come from the database, never from the browser. Returns false when nothing
- * was saved: no product left in the cart, the phone already ordered, the entry belongs
- * to another visitor, or this IP added too many new numbers today.
+ * was saved: no product left in the cart, the phone already ordered, or this IP has
+ * added or taken over too many numbers today.
+ *
+ * Anyone can type any number, so an entry is not locked to the IP that saved it (that
+ * shut out customers whose IP changed, and let whoever typed a number first keep it).
+ * Instead, adding a number or changing one last saved from another IP uses up the IP's
+ * daily allowance, which bounds how many entries one visitor can create or rewrite.
  */
 export async function saveLead(input: z.output<typeof leadSchema>, ipHash: string | null): Promise<boolean> {
   const settings = await getSettingsFresh();
@@ -52,13 +68,13 @@ export async function saveLead(input: z.output<typeof leadSchema>, ipHash: strin
   const data = { customerName: input.customerName, district, items, subtotal, ipHash };
 
   const existing = await prisma.checkoutLead.findUnique({ where: { mobileNumber: input.mobileNumber } });
+  if (ipHash && (!existing || existing.ipHash !== ipHash)) {
+    const limit = await rateLimit(`lead:numbers:ip:${ipHash}`, NUMBERS_PER_IP_PER_DAY, 24 * HOUR_MS);
+    if (!limit.ok) return false;
+  }
+
   if (existing) {
-    const stale = Date.now() - existing.updatedAt.getTime() > 24 * HOUR_MS;
-    // Anyone can type any number: only the visitor who saved an entry may change it, unless it
-    // is a day old (mobile IPs change, and the customer may come back from another network).
-    if (existing.ipHash && existing.ipHash !== ipHash && !stale) return false;
     // A different cart, or a return after an hour, is new activity: open it again for a call.
-    const cartKey = (list: LeadItem[]) => list.map((i) => `${i.name}×${i.quantity}`).join("|");
     const before = Array.isArray(existing.items) ? (existing.items as LeadItem[]) : [];
     const reopen = cartKey(before) !== cartKey(items) || Date.now() - existing.updatedAt.getTime() > HOUR_MS;
     // updateMany: an order's clearLead may have removed it meanwhile, which is fine.
@@ -67,10 +83,6 @@ export async function saveLead(input: z.output<typeof leadSchema>, ipHash: strin
       data: { ...data, ...(reopen ? { contactedAt: null, contactedBy: null } : {}) },
     });
   } else {
-    if (ipHash) {
-      const limit = await rateLimit(`lead:new:ip:${ipHash}`, NEW_LEADS_PER_IP_PER_DAY, 24 * HOUR_MS);
-      if (!limit.ok) return false;
-    }
     try {
       await prisma.checkoutLead.create({ data: { mobileNumber: input.mobileNumber, ...data } });
     } catch (error) {

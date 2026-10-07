@@ -50,6 +50,9 @@ export const LIMITS = {
   // Order lookups by number + phone. Many customers can share one mobile-network IP, so this is
   // generous; a lookup shows no name, address or phone, so guessing gains little.
   trackPerIp: { limit: 30, windowMs: 10 * 60 * 1000 },
+  // Lookups against one phone number from any IP: bounds guessing someone's order numbers
+  // even from many IPs, while a customer checking their own orders stays well under it.
+  trackPerPhone: { limit: 10, windowMs: 60 * 60 * 1000 },
   // Unfinished-checkout saves: the form saves a few times while someone types.
   leadPerIp: { limit: 30, windowMs: 10 * 60 * 1000 },
   loginPerIp: { limit: 10, windowMs: 15 * 60 * 1000 },

@@ -1,5 +1,6 @@
 import { itemLabel } from "@/config/order";
 import { prisma } from "@/lib/db";
+import { getSettingsFresh } from "@/lib/settings";
 
 export interface LowStockVariant {
   productId: string;
@@ -21,6 +22,12 @@ export async function lowStockVariants(threshold: number, take = 20): Promise<Lo
     label: itemLabel(v.product.name, v.product.variants.length > 1 ? v.name : null),
     stock: v.stock ?? 0,
   }));
+}
+
+/** The low-stock level from settings and the variants at or below it, for the dashboard. */
+export async function lowStockSummary(): Promise<{ threshold: number; variants: LowStockVariant[] }> {
+  const { lowStockThreshold } = await getSettingsFresh();
+  return { threshold: lowStockThreshold, variants: await lowStockVariants(lowStockThreshold) };
 }
 
 /**

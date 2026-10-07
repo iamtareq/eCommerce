@@ -16,10 +16,13 @@ export async function trackOrderAction(_prev: TrackState, formData: FormData): P
   const fail = (error: string): TrackState => ({ error, order: null, orderNumber, phone });
 
   if (!orderNumber.trim()) return fail("অর্ডার নম্বর লিখুন।");
-  if (!normalizeBdPhone(phone)) return fail("সঠিক মোবাইল নম্বর লিখুন।");
+  const mobile = normalizeBdPhone(phone);
+  if (!mobile) return fail("সঠিক মোবাইল নম্বর লিখুন।");
 
-  const limit = await rateLimit(`track:ip:${hashIp(getClientIp(await headers()))}`, LIMITS.trackPerIp.limit, LIMITS.trackPerIp.windowMs);
-  if (!limit.ok) return fail("অনেকবার চেষ্টা করা হয়েছে। ১০ মিনিট পর আবার চেষ্টা করুন।");
+  const byIp = await rateLimit(`track:ip:${hashIp(getClientIp(await headers()))}`, LIMITS.trackPerIp.limit, LIMITS.trackPerIp.windowMs);
+  if (!byIp.ok) return fail("অনেকবার চেষ্টা করা হয়েছে। ১০ মিনিট পর আবার চেষ্টা করুন।");
+  const byPhone = await rateLimit(`track:phone:${mobile}`, LIMITS.trackPerPhone.limit, LIMITS.trackPerPhone.windowMs);
+  if (!byPhone.ok) return fail("এই নম্বর দিয়ে অনেকবার খোঁজা হয়েছে। এক ঘণ্টা পর আবার চেষ্টা করুন, বা আমাদের ফেসবুক পেজে মেসেজ দিন।");
 
   const order = await findOrderForTracking(orderNumber, phone);
   // One message for both a wrong number and a wrong phone, so neither can be checked alone.

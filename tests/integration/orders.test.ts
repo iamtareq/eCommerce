@@ -497,17 +497,25 @@ describe("incomplete orders", () => {
     expect((await listLeads())[0]).toMatchObject({ contactedAt: null, contactedBy: null });
   });
 
-  it("does not let another visitor change a fresh entry, or one IP add endless numbers", async () => {
-    await saveLead(lead(), "ip1");
-    expect(await saveLead(lead({ customerName: "spam" }), "ip2")).toBe(false);
-    expect((await listLeads())[0]!.customerName).toBe("Rahim");
-    // A day later the customer may be back on another network.
-    await prisma.checkoutLead.updateMany({ data: { updatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000) } });
-    expect(await saveLead(lead({ customerName: "Rahim again" }), "ip2")).toBe(true);
-    expect((await listLeads())[0]!.customerName).toBe("Rahim again");
+  it("lets a customer save from a new IP, but caps how many numbers one IP adds or takes over", async () => {
+    await saveLead(lead(), "wifi");
+    // The same customer on mobile data: saved, not locked out.
+    expect(await saveLead(lead({ customerName: "Rahim Uddin" }), "mobile")).toBe(true);
+    expect((await listLeads())[0]!.customerName).toBe("Rahim Uddin");
 
-    for (let n = 0; n < 20; n++) expect(await saveLead(lead({ mobileNumber: `0171000${String(n).padStart(4, "0")}` }), "ip3")).toBe(true);
-    expect(await saveLead(lead({ mobileNumber: "01710009999" }), "ip3")).toBe(false);
+    // One IP: 20 numbers a day, whether new or taken over from another IP.
+    for (let n = 0; n < 19; n++) expect(await saveLead(lead({ mobileNumber: `0171000${String(n).padStart(4, "0")}` }), "spammer")).toBe(true);
+    expect(await saveLead(lead({ customerName: "spam" }), "spammer")).toBe(true); // the 20th: taking over Rahim's
+    expect(await saveLead(lead({ mobileNumber: "01710009999" }), "spammer")).toBe(false);
+    expect(await saveLead(lead({ customerName: "spam again" }), "spammer")).toBe(true); // its own entry now: no cost
+  });
+
+  it("does not reopen a contacted entry when only the cart's order changes", async () => {
+    const two = [{ variantId: f.box, quantity: 1 }, { variantId: f.frameSmall, quantity: 1 }];
+    await saveLead(lead({ items: two }), "ip1");
+    await prisma.checkoutLead.updateMany({ data: { contactedAt: new Date() } });
+    await saveLead(lead({ items: [...two].reverse() }), "ip1");
+    expect(await countOpenLeads()).toBe(0);
   });
 
   it("keeps one entry per phone, priced from the database", async () => {
