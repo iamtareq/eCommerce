@@ -115,6 +115,11 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
                       <td className={table.td}>
                         <span className="block font-semibold text-ink">{c.name}</span>
                         {c.description && <span className="mt-0.5 line-clamp-2 block max-w-md text-xs text-muted">{c.description}</span>}
+                        {/* On phones the other columns start off-screen; show the essentials here too. */}
+                        <span className="mt-1 flex items-center gap-2 text-xs text-muted md:hidden">
+                          {c.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Hidden</Badge>}
+                          {c.productCount} product{c.productCount === 1 ? "" : "s"}
+                        </span>
                       </td>
                       <td className={`${table.td} font-mono text-xs text-ink-soft`}>{c.slug}</td>
                       <td className={table.td}>{c.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Hidden</Badge>}</td>

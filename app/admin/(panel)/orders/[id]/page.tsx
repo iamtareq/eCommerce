@@ -103,35 +103,55 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </Card>
 
           <Card title={`Items (${order.itemCount})`} padded={false}>
-            <div className={table.wrap}>
-              <table className={table.table}>
-                <thead>
-                  <tr>
-                    <th className={table.th}>Product</th>
-                    <th className={table.th}>SKU</th>
-                    <th className={`${table.th} text-right`}>Unit price</th>
-                    <th className={`${table.th} text-right`}>Qty</th>
-                    <th className={`${table.th} text-right`}>Discount</th>
-                    <th className={`${table.th} text-right`}>Line total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((i) => (
-                    <tr key={i.id}>
-                      <td className={`${table.td} font-medium`}>{itemLabel(i.productName, i.variantName)}</td>
-                      <td className={`${table.td} font-mono text-xs text-muted`}>{i.sku ?? "—"}</td>
-                      <td className={`${table.td} text-right tabular-nums`}>
-                        {formatTaka(i.unitPrice)}
-                        {i.compareAtPrice && <span className="block text-xs text-muted line-through">{formatTaka(i.compareAtPrice)}</span>}
-                      </td>
-                      <td className={`${table.td} text-right tabular-nums`}>{i.quantity}</td>
-                      <td className={`${table.td} text-right tabular-nums`}>{i.lineDiscount ? `− ${formatTaka(i.lineDiscount)}` : "—"}</td>
-                      <td className={`${table.td} text-right font-semibold tabular-nums`}>{formatTaka(i.lineSubtotal - i.lineDiscount)}</td>
+            <>
+              <ul className={table.cards}>
+                {order.items.map((i) => (
+                  <li key={i.id} className={table.card}>
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="font-medium text-ink">{itemLabel(i.productName, i.variantName)}</span>
+                      <span className="font-semibold whitespace-nowrap tabular-nums">{formatTaka(i.lineSubtotal - i.lineDiscount)}</span>
+                    </span>
+                    <span className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted tabular-nums">
+                      <span>
+                        {i.quantity} × {formatTaka(i.unitPrice)}
+                        {i.compareAtPrice && <span className="ml-1 line-through">{formatTaka(i.compareAtPrice)}</span>}
+                      </span>
+                      {i.lineDiscount > 0 && <span>Discount − {formatTaka(i.lineDiscount)}</span>}
+                      {i.sku && <span className="font-mono">{i.sku}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className={table.desktopWrap}>
+                <table className={table.table}>
+                  <thead>
+                    <tr>
+                      <th className={table.th}>Product</th>
+                      <th className={table.th}>SKU</th>
+                      <th className={`${table.th} text-right`}>Unit price</th>
+                      <th className={`${table.th} text-right`}>Qty</th>
+                      <th className={`${table.th} text-right`}>Discount</th>
+                      <th className={`${table.th} text-right`}>Line total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {order.items.map((i) => (
+                      <tr key={i.id}>
+                        <td className={`${table.td} font-medium`}>{itemLabel(i.productName, i.variantName)}</td>
+                        <td className={`${table.td} font-mono text-xs text-muted`}>{i.sku ?? "—"}</td>
+                        <td className={`${table.td} text-right tabular-nums`}>
+                          {formatTaka(i.unitPrice)}
+                          {i.compareAtPrice && <span className="block text-xs text-muted line-through">{formatTaka(i.compareAtPrice)}</span>}
+                        </td>
+                        <td className={`${table.td} text-right tabular-nums`}>{i.quantity}</td>
+                        <td className={`${table.td} text-right tabular-nums`}>{i.lineDiscount ? `− ${formatTaka(i.lineDiscount)}` : "—"}</td>
+                        <td className={`${table.td} text-right font-semibold tabular-nums`}>{formatTaka(i.lineSubtotal - i.lineDiscount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
             <dl className="ml-auto max-w-sm space-y-1.5 p-4 sm:p-5">
               <Money label="Subtotal" value={order.subtotal} />
               <Money label="Quantity discount" value={order.quantityDiscount} negative />

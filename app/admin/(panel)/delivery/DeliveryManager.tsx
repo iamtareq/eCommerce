@@ -92,7 +92,7 @@ function AreaChips({ areas }: { areas: DistrictGroup["areas"] }) {
         </span>
       ))}
       {areas.length > CHIP_LIMIT && (
-        <button type="button" onClick={() => setExpanded((x) => !x)} className="text-xs font-semibold text-pine-700 hover:underline">
+        <button type="button" onClick={() => setExpanded((x) => !x)} className="-my-2 py-2 text-xs font-semibold text-pine-700 hover:underline">
           {expanded ? "Show less" : `+${areas.length - CHIP_LIMIT} more`}
         </button>
       )}
