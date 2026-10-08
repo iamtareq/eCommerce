@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCart } from "@/components/cart/CartProvider";
+import { useCart, type CartItem } from "@/components/cart/CartProvider";
 import { Icon } from "@/components/ui/Icon";
 import { btn, field } from "@/components/ui/styles";
 import { track } from "@/lib/analytics";
@@ -71,6 +71,21 @@ async function fetchQuote(input: QuoteInput, signal?: AbortSignal): Promise<Quot
     clearTimeout(timer);
     signal?.removeEventListener("abort", cancel);
   }
+}
+
+/** The cart's view of a checkout line. */
+function toCartItem(line: CheckoutLine): CartItem {
+  return {
+    variantId: line.variantId,
+    productId: line.productId,
+    slug: line.slug,
+    name: line.name,
+    variantName: line.variantName,
+    image: line.image,
+    price: line.price,
+    quantity: line.quantity,
+    maxQuantity: line.maxQuantity,
+  };
 }
 
 function Card({ step, title, children }: { step: string; title: string; children: React.ReactNode }) {
@@ -191,6 +206,21 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [featuredLine?.variantId, featuredLine?.quantity, featuredLine?.price, cart.items],
   );
+
+  // ─── The viewed product is part of the order but not of the cart, so the cart
+  // badge would undercount it. Once the visitor is filling in the form for it,
+  // register it: the badge counts it and opening the cart takes it along.
+  const ordering = Boolean(customerName || mobileNumber || address || location.divisionId || customerNote || giftMessage || giftWrap);
+  const setPending = cart.setPending;
+  useEffect(() => {
+    if (!featuredLine || !ordering) {
+      setPending(null);
+      return;
+    }
+    setPending(toCartItem(featuredLine));
+    return () => setPending(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordering, setPending, featuredLine?.variantId, featuredLine?.quantity, featuredLine?.price]);
 
   const items = useMemo(() => lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), [lines]);
   const inputKey = JSON.stringify([items, location.districtId, location.areaId, appliedCoupon, giftWrap]);
@@ -318,21 +348,7 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
    * it. Move it into the cart first, then go to the product list.
    */
   function addMoreProducts() {
-    if (featuredLine) {
-      cart.add(
-        {
-          variantId: featuredLine.variantId,
-          productId: featuredLine.productId,
-          slug: featuredLine.slug,
-          name: featuredLine.name,
-          variantName: featuredLine.variantName,
-          image: featuredLine.image,
-          price: featuredLine.price,
-          maxQuantity: featuredLine.maxQuantity,
-        },
-        featuredLine.quantity,
-      );
-    }
+    if (featuredLine) cart.add(toCartItem(featuredLine), featuredLine.quantity);
     router.push("/products");
   }
 

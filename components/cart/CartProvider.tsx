@@ -24,7 +24,19 @@ export interface CartItem {
 interface CartContextValue {
   items: CartItem[];
   ready: boolean;
+  /** Units in the cart. */
   count: number;
+  /**
+   * The product of the page being viewed, once the visitor is clearly ordering
+   * it. It is part of the order on screen but not yet a cart item, so the cart
+   * badge counts it and opening the cart commits it. Never persisted.
+   */
+  pending: CartItem | null;
+  /** What the pending line adds to the badge: 0 once that variant is in the cart. */
+  pendingCount: number;
+  setPending: (item: CartItem | null) => void;
+  /** Move the pending line into the cart — call before leaving the page it belongs to. */
+  commitPending: () => void;
   add: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   setQuantity: (variantId: string, quantity: number) => void;
   remove: (variantId: string) => void;
@@ -61,9 +73,17 @@ function write(items: CartItem[]) {
   }
 }
 
+/** Two pending lines that are the same offer must not cause a re-render. */
+function samePending(a: CartItem | null, b: CartItem | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.variantId === b.variantId && a.quantity === b.quantity && a.price === b.price;
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [ready, setReady] = useState(false);
+  const [pending, setPendingState] = useState<CartItem | null>(null);
 
   useEffect(() => {
     // Hydrate after mount so server and first client render match.
@@ -85,12 +105,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const value = useMemo<CartContextValue>(
-    () => ({
-      items,
-      ready,
-      count: items.reduce((s, i) => s + i.quantity, 0),
-      add: (item, quantity = 1) =>
+  // Stable, so the page that owns a pending line can register it from an effect.
+  const setPending = useCallback((item: CartItem | null) => {
+    setPendingState((prev) => (samePending(prev, item) ? prev : item));
+  }, []);
+
+  const value = useMemo<CartContextValue>(() => {
+    const add: CartContextValue["add"] = (item, quantity = 1) =>
         update((prev) => {
           const existing = prev.find((i) => i.variantId === item.variantId);
           if (existing) {
@@ -102,7 +123,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           }
           if (prev.length >= MAX_LINES) return prev;
           return [...prev, { ...item, quantity: Math.max(1, Math.min(item.maxQuantity || quantity, quantity)) }];
-        }),
+        });
+
+    const pendingInCart = !!pending && items.some((i) => i.variantId === pending.variantId);
+
+    return {
+      items,
+      ready,
+      count: items.reduce((s, i) => s + i.quantity, 0),
+      pending,
+      pendingCount: pending && !pendingInCart ? pending.quantity : 0,
+      setPending,
+      commitPending: () => {
+        if (pending && !pendingInCart) {
+          const { quantity, ...item } = pending;
+          add(item, quantity);
+        }
+        setPendingState(null);
+      },
+      add,
       setQuantity: (variantId, quantity) =>
         update((prev) =>
           prev.map((i) => (i.variantId === variantId ? { ...i, quantity: Math.max(1, Math.min(quantity, i.maxQuantity || quantity)) } : i)),
@@ -110,9 +149,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       remove: (variantId) => update((prev) => prev.filter((i) => i.variantId !== variantId)),
       has: (variantId) => items.some((i) => i.variantId === variantId),
       clear: () => update(() => []),
-    }),
-    [items, ready, update],
-  );
+    };
+  }, [items, ready, update, pending, setPending]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

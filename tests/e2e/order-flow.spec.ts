@@ -57,6 +57,9 @@ test.describe("customer order flow", () => {
     await expect(order.getByText("ওয়াল ফ্রেম").first()).toBeVisible();
     await expect(page.getByLabel(/আপনার নাম/)).toHaveValue("দুই পণ্যের ক্রেতা");
     await expect(page.getByLabel(/সম্পূর্ণ ঠিকানা/)).toHaveValue("বাড়ি ৭, রোড ২, মিরপুর");
+
+    // The badge counts the product of this page too, now that it is being ordered.
+    await expect(page.locator("a[aria-label^='কার্ট']").first()).toHaveAttribute("aria-label", /২টি পণ্য/);
   });
 });
 
