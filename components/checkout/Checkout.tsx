@@ -29,6 +29,24 @@ const FIELD_ORDER = ["items", "customerName", "mobileNumber", "divisionId", "dis
 const QUOTE_TIMEOUT_MS = 15_000;
 
 /**
+ * Where the half-filled form is kept while the visitor steps away to pick more
+ * products. sessionStorage, not localStorage: the draft dies with the tab, so
+ * personal details are not left behind on a shared device.
+ */
+const DRAFT_KEY = "deenbox.checkout.draft.v1";
+
+interface Draft {
+  customerName: string;
+  mobileNumber: string;
+  location: LocationValue;
+  address: string;
+  customerNote: string;
+  giftMessage: string;
+  giftWrap: boolean;
+  appliedCoupon: string;
+}
+
+/**
  * Prices the given inputs on the server. Resolves to null when the request
  * fails, times out or is cancelled — the caller decides how to recover.
  */
@@ -101,6 +119,51 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
   const [quoteNonce, setQuoteNonce] = useState(0);
   // The inputs on screen now, for work that resumes after an await.
   const latestInputKey = useRef("");
+
+  // ─── Draft: what was typed survives a trip to the product list and back.
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      const d = raw ? (JSON.parse(raw) as Partial<Draft>) : null;
+      if (d) {
+        const str = (v: unknown) => (typeof v === "string" ? v.slice(0, 1000) : "");
+        const coupon = str(d.appliedCoupon);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCustomerName(str(d.customerName));
+        setMobileNumber(str(d.mobileNumber));
+        setAddress(str(d.address));
+        setCustomerNote(str(d.customerNote));
+        setGiftMessage(str(d.giftMessage));
+        setGiftWrap(d.giftWrap === true);
+        setAppliedCoupon(coupon);
+        setCouponInput(coupon);
+        const loc = d.location;
+        if (loc && typeof loc === "object") {
+          setLocation({
+            divisionId: str(loc.divisionId),
+            districtId: str(loc.districtId),
+            areaId: str(loc.areaId),
+            areaOther: str(loc.areaOther),
+          });
+        }
+      }
+    } catch {
+      // Private mode or a corrupt draft — start with an empty form.
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return; // never overwrite the draft before it is read
+    const draft: Draft = { customerName, mobileNumber, location, address, customerNote, giftMessage, giftWrap, appliedCoupon };
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Storage unavailable or full — the form still works for this page view.
+    }
+  }, [draftReady, customerName, mobileNumber, location, address, customerNote, giftMessage, giftWrap, appliedCoupon]);
 
   // ─── Lines: the product being viewed (if not already in the cart) + cart items.
   const featuredVariant = featured?.variants.find((v) => v.id === featured.selectedVariantId);
@@ -250,6 +313,29 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
     else cart.setQuantity(line.variantId, quantity);
   }
 
+  /**
+   * The product-page line is not in the cart yet, so navigating away would drop
+   * it. Move it into the cart first, then go to the product list.
+   */
+  function addMoreProducts() {
+    if (featuredLine) {
+      cart.add(
+        {
+          variantId: featuredLine.variantId,
+          productId: featuredLine.productId,
+          slug: featuredLine.slug,
+          name: featuredLine.name,
+          variantName: featuredLine.variantName,
+          image: featuredLine.image,
+          price: featuredLine.price,
+          maxQuantity: featuredLine.maxQuantity,
+        },
+        featuredLine.quantity,
+      );
+    }
+    router.push("/products");
+  }
+
   function removeLine(line: CheckoutLine) {
     if (line.featured) setFeaturedDismissed(true);
     else cart.remove(line.variantId);
@@ -350,6 +436,7 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
       if (data && data.ok) {
         track({ name: "order_success", orderNumber: data.orderNumber, value: data.total, itemCount: data.itemCount });
         try {
+          sessionStorage.removeItem(DRAFT_KEY);
           sessionStorage.setItem(`deenbox.tracked.${data.orderNumber}`, "1");
         } catch {}
         cart.clear();
@@ -495,11 +582,13 @@ export function Checkout({ featured }: { featured?: FeaturedProduct }) {
               {quote.appliedTiers.map((t) => `${t.productName}: ${formatTakaBn(t.amount)} ছাড় পেয়েছেন`).join("। ")}
             </p>
           )}
-          {featured && (
-            <Link href="/products" className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-pine-700 hover:text-pine-900">
-              <Icon name="plus" className="size-4" /> আরও পণ্য যোগ করুন
-            </Link>
-          )}
+          <button
+            type="button"
+            onClick={addMoreProducts}
+            className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-pine-700 hover:text-pine-900"
+          >
+            <Icon name="plus" className="size-4" /> আরও পণ্য যোগ করুন
+          </button>
         </Card>
 
         <Card step="২" title="আপনার তথ্য">

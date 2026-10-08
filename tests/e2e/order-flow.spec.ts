@@ -40,6 +40,24 @@ test.describe("customer order flow", () => {
     await expect(page.getByText(/^DBX-\d{8}-\d{4}$/)).toBeVisible();
     await expect(page.getByRole("link", { name: /ফেসবুক পেজে যান/ })).toHaveAttribute("href", /facebook\.com/);
   });
+
+  test("the add-more-products button keeps the viewed product and what was typed", async ({ page }) => {
+    await page.goto("/products/demo-gift-box#order");
+    await page.getByLabel(/আপনার নাম/).fill("দুই পণ্যের ক্রেতা");
+    await page.getByLabel(/সম্পূর্ণ ঠিকানা/).fill("বাড়ি ৭, রোড ২, মিরপুর");
+
+    await page.getByRole("button", { name: /আরও পণ্য যোগ করুন/ }).click();
+    await expect(page).toHaveURL(/products$/);
+    await page.getByRole("link", { name: /ওয়াল ফ্রেম/ }).first().click();
+    await expect(page).toHaveURL(/demo-wall-frame/);
+
+    // Both products are in the order, and the typed details came back.
+    const order = page.locator("#order");
+    await expect(order.getByText("ইসলামিক গিফট বক্স").first()).toBeVisible();
+    await expect(order.getByText("ওয়াল ফ্রেম").first()).toBeVisible();
+    await expect(page.getByLabel(/আপনার নাম/)).toHaveValue("দুই পণ্যের ক্রেতা");
+    await expect(page.getByLabel(/সম্পূর্ণ ঠিকানা/)).toHaveValue("বাড়ি ৭, রোড ২, মিরপুর");
+  });
 });
 
 test.describe("coupons", () => {
